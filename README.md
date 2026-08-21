@@ -35,6 +35,9 @@ packages/
     migrations/                 # 20260821030304_strong_skaar, 20260821035659_large_quentin_quire, 20260821044020_robust_morg (6 ADD COLUMN FSRS), 20260821060345_flawless_starbolt (category)
   shared/
     index.ts                    # fsrsEngine, Rating, FSRSCard, createEmptyCard
+  mcp/
+    src/index.ts                # MCP stdio server — 13 tools CRUD/kategori/search/FSRS review/import/export
+    claude_desktop_config.example.json  # Snippet konfigurasi Claude Desktop
 ```
 
 ### Skema `cards` (D1 & Dexie sinkron, 14 kolom)
@@ -43,7 +46,7 @@ packages/
 |---|---|---|
 | `id` | `text` PK | `crypto.randomUUID()` |
 | `front` / `back` | `text` | Konten kartu |
-| `category` | `text` default `"general"` | `general` / `inggris` / `jepang` / `korea` / `jerman` / `matematika` / `fisika` / `gis` / custom — bebas, indexed `category` di Dexie untuk filter |
+| `category` | `text` default `"general"` | **Pure dynamic** — kategori apa pun yang ada di kartu (mis. `inggris`, `jepang`, `matematika`, `fisika`, `gis`, atau custom bebas), indexed `category` di Dexie untuk filter bento |
 | `due` | `integer` timestamp | Jadwal berikutnya |
 | `stability` / `difficulty` | `real` | FSRS |
 | `state` | `integer` | 0 New / 1 Learning / 2 Review / 3 Relearning |
@@ -95,7 +98,7 @@ pnpm --filter @flashcard/api run deploy
 
 ```
 Create (Home inline form):
-  front/back/category (datalist DEFAULT_CATEGORIES + custom) → createEmptyCard() → db.cards.add({ id, front, back, category, ...emptyCard, due: now, last_review: undefined }) — hanya Dexie, offline-first, no fetch
+  front/back/category (input bebas + <datalist> kategori yang sudah ada) → createEmptyCard() → db.cards.add({ id, front, back, category, ...emptyCard, due: now, last_review: undefined }) — hanya Dexie, offline-first, no fetch
 
 Review di /review?category=matematika (optional):
   fsrsEngine.repeat(card, now) → preview interval dinamis
@@ -108,7 +111,7 @@ Review di /review?category=matematika (optional):
        → bulkDelete
 
 Home bento:
-  categories = union(DEFAULT_CATEGORIES + from db.cards) sorted general first
+  categories = pure dynamic (Set dari db.cards.category, "general" diprioritaskan di urutan pertama)
   pill "All" + pills per category (lime active #C7F300) → filter grid + dueCount per category
   card badge mono 12px purple #4330C2 + due pulse dot lime jika due <= now
   link card → /review?category=...
@@ -140,7 +143,7 @@ Pull: Home Sync → GET /api/cards → bulkPut (termasuk category)
 - `useSyncWorker` di `__root.tsx` global
 - `POST /api/sync` WAJIB `db.batch()` (bukan loop)
 - Schema → `packages/db/index.ts` → `db:generate` → `wrangler apply`
-- Kategori: free-form string, default `general`, `DEFAULT_CATEGORIES` di Home sebagai seed, custom via input + datalist, filter via bento pills
+- Kategori: **pure dynamic** — tidak ada daftar hardcode; kategori diturunkan dari `db.cards.category` yang ada, fallback `"general"` untuk kartu tanpa kategori, input bebas + `<datalist>` di `CreateCardForm`, filter via bento pills
 
 ## 🤖 MCP Server — AI Card Management
 

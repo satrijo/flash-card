@@ -5,7 +5,7 @@ Proyek ini adalah monorepo _offline-first_ flashcard app. Ikuti aturan berikut d
 ## 1. Arsitektur & Tooling
 
 - **Package Manager:** WAJIB menggunakan `pnpm`. Jangan gunakan `npm` atau `yarn`.
-- **Monorepo:** Menggunakan pnpm workspaces (`apps/web`, `apps/api`, `packages/db`, `packages/shared`).
+- **Monorepo:** Menggunakan pnpm workspaces (`apps/web`, `apps/api`, `packages/db`, `packages/shared`, `packages/mcp`).
 - **Tipe Data:** Gunakan TypeScript secara ketat. Manfaatkan Hono RPC (`hc<AppType>`) di frontend untuk _type safety_ API, jangan tulis fetch manual atau mendefinisikan ulang _type_ respons API di frontend.
 - **Route Generation:** Setelah menambah/mengubah file di `apps/web/src/routes/`, jalankan `pnpm --filter web run generate-routes` untuk regenerasi `routeTree.gen.ts`. Jangan edit file tersebut manual.
 - **Design System:** Ikuti `DESIGN.md` (Systems Architecture: dark `#050505`, surface `#4C4C4C`, primary `#C7F300` lime, secondary `#4330C2` purple, Inter 64px display, JetBrains Mono 12px label, rounded 8px). Jaga palet primary/secondary tetap lock, jangan swap light/dark.
@@ -15,7 +15,7 @@ Proyek ini adalah monorepo _offline-first_ flashcard app. Ikuti aturan berikut d
 - **Framework:** Menggunakan ekosistem TanStack (TanStack Start/Router dengan `validateSearch`) dan React 19.
 - **Styling:** Gunakan Tailwind CSS 4 + `@theme` tokens dari `DESIGN.md`.
 - **Offline-First:** Semua operasi baca/tulis data HARUS ke IndexedDB via **Dexie.js** (`apps/web/src/lib/db.ts`). UI tidak boleh langsung `POST /api/cards` — creation via `db.cards.add(...)` lokal, `createEmptyCard()` dari `@flashcard/shared`.
-- **Dexie Schema:** `cards` (`id, due, category` indexed, v3) menyimpan `LocalCard extends FSRSCard { id, front, back, category }`; `syncQueue` (`++id`) menyimpan `SyncAction { action: "REVIEW_CARD", payload: { id: string, nextState: FSRSCard, category?: string } }` — `payload` WAJIB typed, dilarang `any`. Kategori default `"general"`, bebas: `inggris, jepang, korea, jerman, matematika, fisika, gis` + custom via `<datalist>`.
+- **Dexie Schema:** `cards` (`id, due, category` indexed, v3) menyimpan `LocalCard extends FSRSCard { id, front, back, category }`; `syncQueue` (`++id`) menyimpan `SyncAction { action: "REVIEW_CARD", payload: { id: string, nextState: FSRSCard, category?: string } }` — `payload` WAJIB typed, dilarang `any`. Kategori **pure dynamic** (tidak ada daftar hardcode) — diturunkan dari kategori kartu yang ada, fallback `"general"`, custom via input bebas + `<datalist>`.
 - **Global Sync Worker:** `useSyncWorker` WAJIB di-mount di `apps/web/src/routes/__root.tsx` (bukan page) — polling 10s + `online` event, guard `navigator.onLine`.
 - **Rute:** `/` (hero `Structure dictates function.` 64px Inter → bento pill filter kategori (`All` + pills per kategori dengan dueCount) → grid 2-col + badge kategori mono + due pulse → inline `CreateCardForm` offline-first) dan `/review?category=` (validateSearch plain fn, query `db.cards.where("due").below(now).sortBy("due")` + filter `category` jika param ada, progress lime `#C7F300` di track `#4C4C4C`). Jangan buat rute tanpa query due yang benar.
 - **Spaced Repetition:** Kalkulasi di client via `ts-fsrs` (`fsrsEngine`). Interval tombol `ReviewCard` WAJIB dinamis (`formatInterval` dari `fsrsEngine.repeat` preview), dilarang hard-code `5m/10m/4h`. Card surface `bg-[#0a0a0a]` border `#4C4C4C`, reveal button lime, rating rose/amber/emerald/blue.
@@ -38,7 +38,7 @@ Proyek ini adalah monorepo _offline-first_ flashcard app. Ikuti aturan berikut d
 - **Create:** `CreateCardForm` di Home (offline-first): `createEmptyCard()` → `db.cards.add({ id, front, back, category, ...emptyCard, due: now })` — no API, indexed `category`.
 - **Review:** Di `/review?category=`, transaksi atomik `db.transaction("rw", db.cards, db.syncQueue, ...)` — `db.cards.update` 9 field + `db.syncQueue.add({ action:"REVIEW_CARD", payload:{ id, nextState, category? } })`.
 - **Background:** `useSyncWorker` di `__root.tsx` → `toArray()` → `POST /api/sync` via `hc<AppType>` → `bulkDelete` saat `res.ok`. Polling 10s + `online`.
-- **Pull:** `GET /api/cards` → `bulkPut` (termasuk `category`). `useLiveQuery` reaktif, `DEFAULT_CATEGORIES` (`general, inggris, jepang, korea, jerman, matematika, fisika, gis`) digabung dengan kategori dari DB untuk pill filter.
+- **Pull:** `GET /api/cards` → `bulkPut` (termasuk `category`). `useLiveQuery` reaktif, kategori **pure dynamic** dari `db.cards` (`"general"` diprioritaskan), pill filter bento hanya dari kategori yang ada.
 
 ## 6. Penamaan & Konvensi
 
