@@ -5,9 +5,9 @@
   "compatibility_date": "2026-08-21",
   "d1_databases": [
     {
-      "binding": "DB",
+      "binding": "flashcard_db",
       "database_name": "flashcard_db",
-      "database_id": "xxxx-xxxx-xxxx", // Ganti dengan ID asli nanti saat deploy
+      "database_id": "a08f075b-e11f-451d-8a1f-893bf0aa8cac",
       "migrations_dir": "../../packages/db/migrations",
       "migrations_pattern": "../../packages/db/migrations/*/migration.sql",
     },

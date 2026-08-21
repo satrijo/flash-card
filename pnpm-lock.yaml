@@ -18,10 +18,13 @@ importers:
         version: link:../../packages/shared
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260821.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@9.6.0)(zod@4.4.3)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@5.20260821.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@9.6.0)(zod@3.25.76)
       hono:
         specifier: ^4.13.3
         version: 4.13.3
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^5.20260821.1
@@ -4415,13 +4418,6 @@ snapshots:
       '@types/better-sqlite3': 7.6.13
       better-sqlite3: 9.6.0
       zod: 3.25.76
-
-  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@5.20260821.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@9.6.0)(zod@4.4.3):
-    optionalDependencies:
-      '@cloudflare/workers-types': 5.20260821.1
-      '@types/better-sqlite3': 7.6.13
-      better-sqlite3: 9.6.0
-      zod: 4.4.3
 
   dunder-proto@1.0.1:
     dependencies:

@@ -87,12 +87,87 @@ pnpm --filter web run dev
 pnpm --filter web run generate-routes         # setelah ubah routes
 ```
 
-### Deploy
+### Deploy ke Cloudflare (Production)
+
+> Urutan wajib: **API dulu → Web**. Web butuh URL API saat build (`VITE_API_URL`).
+
+#### 1. Login & buat D1 (sekali saja)
 
 ```bash
-pnpm --filter web run build && pnpm --filter web run deploy
-pnpm --filter @flashcard/api run deploy
+npx wrangler login
+npx wrangler whoami
+npx wrangler d1 create flashcard_db
+# output: database_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
+
+Copy `database_id` tersebut → paste ke `apps/api/wrangler.jsonc` ganti `xxxx-xxxx-xxxx`:
+
+```jsonc
+"d1_databases": [{ "binding": "DB", "database_name": "flashcard_db", "database_id": "ID_ASLI_DISINI", "migrations_dir": "../../packages/db/migrations" }]
+```
+
+#### 2. Migrasi ke D1 Remote
+
+```bash
+pnpm --filter @flashcard/api exec wrangler d1 migrations apply flashcard_db --remote
+pnpm --filter @flashcard/api exec wrangler d1 execute flashcard_db --remote --command "SELECT count(*) as total FROM cards"
+```
+
+#### 3. Deploy API
+
+```bash
+pnpm --filter @flashcard/api run deploy
+# → https://api.<subdomain>.workers.dev
+curl https://api.<subdomain>.workers.dev/api/hello
+# {"message":"Hello from Cloudflare D1!"}
+```
+
+#### 4. Deploy Web (butuh URL API)
+
+`VITE_API_URL` di-embed saat `vite build`, jadi harus di-set sebelum build:
+
+```bash
+VITE_API_URL="https://api.<subdomain>.workers.dev" pnpm --filter web run deploy
+# = vite build + wrangler deploy → https://tanstack-start-app.<subdomain>.workers.dev
+```
+
+Atau dua langkah:
+
+```bash
+export VITE_API_URL="https://api.<subdomain>.workers.dev"
+pnpm --filter web run build
+pnpm --filter web exec wrangler deploy
+```
+
+> Lokal tetap pakai `http://localhost:8787` (fallback di `apps/web/src/lib/api.ts`). Tidak perlu set `VITE_API_URL` saat `pnpm dev`.
+
+#### 5. Verifikasi
+
+```bash
+curl https://api.<subdomain>.workers.dev/api/cards | head
+# buka https://tanstack-start-app.<subdomain>.workers.dev → buat kartu → review → sync harus hijau
+```
+
+#### Update / Rollback
+
+```bash
+# ada perubahan schema?
+pnpm --filter @flashcard/db run db:generate
+pnpm --filter @flashcard/api exec wrangler d1 migrations apply flashcard_db --remote
+pnpm --filter @flashcard/api run deploy
+VITE_API_URL="https://api.<subdomain>.workers.dev" pnpm --filter web run deploy
+
+# rollback cepat
+npx wrangler deployments list --name api
+npx wrangler rollback --name api --deployment-id <ID>
+```
+
+#### Catatan
+
+- **Custom domain:** Cloudflare Dashboard → Workers & Pages → `api` / `tanstack-start-app` → Settings → Triggers → Add Custom Domain.
+- **Env lain:** `apps/api` tidak butuh secret sekarang; `apps/web` hanya `VITE_API_URL`. Jika butuh, set via `npx wrangler secret put KEY --name api` atau `vars` di `wrangler.jsonc`.
+- **CI/CD:** Buat `.github/workflows/deploy.yml` yang jalan `pnpm install → d1 migrations apply --remote → deploy api → deploy web (dengan VITE_API_URL)`.
+- **MCP (`packages/mcp`) tidak di-deploy** — stdio lokal saja (`pnpm --filter @flashcard/mcp run dev` via `opencode.jsonc`).
 
 ## 🔄 Alur Offline-First dengan Kategori
 
