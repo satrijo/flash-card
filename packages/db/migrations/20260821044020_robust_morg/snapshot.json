@@ -1,0 +1,154 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "9b5476ec-3e89-4531-b7b6-44d9bd2d6e26",
+  "prevIds": [
+    "cb72e66a-feaf-4fa1-b8c2-76ee6c834490"
+  ],
+  "ddl": [
+    {
+      "name": "cards",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "front",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "back",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "due",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "stability",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "difficulty",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "state",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "elapsed_days",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "scheduled_days",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "reps",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "lapses",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_review",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%s', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "cards"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "cards_pk",
+      "table": "cards",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}

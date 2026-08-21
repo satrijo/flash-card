@@ -1,0 +1,1 @@
+ALTER TABLE `cards` ADD `category` text DEFAULT 'general' NOT NULL;

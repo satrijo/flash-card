@@ -1,0 +1,34 @@
+{
+  "name": "@flashcard/mcp",
+  "version": "1.0.0",
+  "description": "MCP stdio server for Flashcard SRS",
+  "type": "module",
+  "bin": {
+    "flashcard-mcp": "./dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "mcp:dev": "tsx src/index.ts",
+    "build": "pnpm --filter @flashcard/db run build && pnpm --filter @flashcard/shared run build && tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.1",
+  "dependencies": {
+    "@flashcard/db": "workspace:*",
+    "@flashcard/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^9.4.3",
+    "drizzle-orm": "1.0.0-rc.4",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

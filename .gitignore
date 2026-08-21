@@ -1,0 +1,105 @@
+# ===== Dependencies =====
+node_modules/
+.pnp
+.pnp.*
+
+# pnpm-only repo — lockfile dari npm/yarn/bun adalah noise
+package-lock.json
+yarn.lock
+bun.lock
+
+# ===== Build outputs =====
+dist
+dist-ssr
+build
+.output
+.out
+.next
+.nuxt
+.tanstack
+.nitro
+.vinxi
+.astro
+.svelte-kit
+.turbo
+.vite
+.parcel-cache
+
+# ===== Cloudflare / Wrangler (termasuk D1 local state) =====
+.wrangler
+.dev.vars
+.miniflare
+.workerd
+
+# ===== Database lokal (D1 SQLite + fallback) =====
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+flashcard.db
+
+# ===== Env & secrets =====
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local
+
+# ===== Logs =====
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pnpm-debug.*
+lerna-debug.log*
+
+# ===== OS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== Editor / IDE =====
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/*.code-snippets
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+.cursor
+.trae
+
+# ===== Agent tooling lokal (bukan bagian repo) =====
+.codegraph
+codedb.snapshot
+.omo
+.agent
+.agents
+.opencode/node_modules
+.opencode/*.log
+
+# ===== Testing / Coverage =====
+coverage
+.nyc_output
+.jest
+
+# ===== Misc =====
+.cache
+.tmp
+temp
+__unconfig*
+todos.json
+*.tsbuildinfo

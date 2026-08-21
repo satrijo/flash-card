@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // Flashcard SRS MCP server — 13 tools (ping + 8 core + 4 advanced):
+    // ping, list/get/create/update/delete/bulk_create_cards, list_categories, get_stats,
+    // search_cards, review_card, import_cards, export_cards.
+    //
+    // DB_PATH resolution (packages/mcp/src/index.ts createDb()):
+    //   1. env DB_PATH (explicit override, e.g. "/tmp/test.db")
+    //   2. auto-discovered wrangler D1 sqlite: .wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite
+    //      (newest mtime wins; created by `pnpm --filter @flashcard/api exec wrangler d1 migrations apply flashcard_db --local`)
+    //   3. packages/db/flashcard.db if present
+    //   4. ":memory:" fallback (tools/list works; DB tools get an empty DB)
+    // Leave DB_PATH unset here so auto-discovery kicks in — no manual path needed.
+    //
+    // API_URL is reserved for a future HTTP transport (stdio-only today); harmless to set.
+    //
+    // NOTE: better-sqlite3 9.6.0 has a Node 24 ABI mismatch in this env — DB-backed tools
+    // fail there, but tools/list succeeds (no DB access). Expected, not a config bug.
+    "flashcard": {
+      "type": "local",
+      "command": ["pnpm", "--filter", "@flashcard/mcp", "run", "dev"],
+      "environment": {
+        "API_URL": "http://localhost:8787"
+      },
+      "enabled": true,
+      "timeout": 10000
+    }
+  }
+}

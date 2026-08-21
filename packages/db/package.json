@@ -1,0 +1,25 @@
+{
+  "name": "@flashcard/db",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.30.1",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "1.0.0-rc.4",
+    "wrangler": "^4.125.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "drizzle-kit": "1.0.0-rc.4",
+    "tsx": "^4.23.12"
+  }
+}

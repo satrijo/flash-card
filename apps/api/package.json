@@ -1,0 +1,21 @@
+{
+  "name": "@flashcard/api",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "@flashcard/db": "workspace:*",
+    "@flashcard/shared": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
+    "hono": "^4.13.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260821.1",
+    "wrangler": "^4.110.0"
+  }
+}

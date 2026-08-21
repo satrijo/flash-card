@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-21",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "flashcard_db",
+      "database_id": "xxxx-xxxx-xxxx", // Ganti dengan ID asli nanti saat deploy
+      "migrations_dir": "../../packages/db/migrations",
+      "migrations_pattern": "../../packages/db/migrations/*/migration.sql",
+    },
+  ],
+}
