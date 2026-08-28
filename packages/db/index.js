@@ -3,7 +3,7 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 export const cards = sqliteTable("cards", {
     id: text("id").primaryKey(),
-    front: text("front").notNull(),
+    front: text("front").notNull().unique(),
     back: text("back").notNull(),
     category: text("category").default("general").notNull(),
     due: integer("due", { mode: "timestamp" }).notNull(),
@@ -14,6 +14,7 @@ export const cards = sqliteTable("cards", {
     state: integer("state").default(0).notNull(),
     elapsed_days: real("elapsed_days").default(0).notNull(),
     scheduled_days: real("scheduled_days").default(0).notNull(),
+    learning_steps: integer("learning_steps").default(0).notNull(),
     reps: integer("reps").default(0).notNull(),
     lapses: integer("lapses").default(0).notNull(),
     last_review: integer("last_review", { mode: "timestamp" }),

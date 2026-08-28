@@ -12,8 +12,6 @@ import {
   or,
   type SQL,
 } from "drizzle-orm";
-import { eq as drizzleEq } from "drizzle-orm";
-import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 import { cards } from "@flashcard/db";
 import { cors } from "hono/cors";
@@ -31,6 +29,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 type Bindings = {
   DB: D1Database;
+  flashcard_db: D1Database;
   MCP_TOKEN?: string;
 };
 
@@ -40,79 +39,72 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use("/*", cors());
 
 // ===========================================================================
-// EXISTING API ROUTES (unchanged)
+// DECK API — read-only, top-down download untuk web/PWA.
+// Server hanyalah perpustakaan kartu bersama; progress belajar tidak pernah
+// dikirim balik ke sini (murni IndexedDB per device).
 // ===========================================================================
 
+const getD1 = (c: { env: Bindings }) => c.env.flashcard_db ?? c.env.DB;
+
+// FNV-1a 32-bit atas seluruh isi tabel cards (di-sort by id supaya stabil).
+// Dipakai client sebagai version-check: sama = skip download.
+function deckVersionFromRows(
+  rows: { id: string; front: string; back: string; category: string }[],
+): string {
+  let hash = 0x811c9dc5;
+  const step = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      hash ^= s.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+  };
+  for (const r of rows) {
+    step(`${r.id}\u0000${r.front}\u0000${r.back}\u0000${r.category}`);
+    step("\u0001"); // pemisah antar kartu
+  }
+  return `fnv1a-${hash.toString(16).padStart(8, "0")}`;
+}
+
 const routes = app
-  .get("/api/cards", async (c) => {
-    const db = drizzle(c.env.DB);
-    const allCards = await db.select().from(cards).all();
-    return c.json(allCards);
-  })
-  .post("/api/cards", async (c) => {
-    const db = drizzle(c.env.DB);
-    const body = await c.req.json();
-    const newCard = await db
-      .insert(cards)
-      .values({
-        id: crypto.randomUUID(),
-        front: body.front,
-        back: body.back,
-        category: body.category?.trim() || "general",
-        due: new Date(),
-      })
-      .returning()
-      .get();
-    return c.json(newCard);
-  })
   .get("/api/hello", async (c) => {
     return c.json({ message: "Hello from Cloudflare D1!" });
   })
-  .post("/api/sync", async (c) => {
-    const db = drizzle(c.env.DB);
-    const body = await c.req.json();
-    const actions = body.actions;
+  .get("/api/deck/version", async (c) => {
+    const db = drizzle(getD1(c));
+    const rows = await db
+      .select({
+        id: cards.id,
+        front: cards.front,
+        back: cards.back,
+        category: cards.category,
+      })
+      .from(cards)
+      .orderBy(asc(cards.id))
+      .all();
+    return c.json({
+      version: deckVersionFromRows(rows),
+      count: rows.length,
+    });
+  })
+  .get("/api/deck/cards", async (c) => {
+    const offsetRaw = Number(c.req.query("offset") ?? "0");
+    const limitRaw = Number(c.req.query("limit") ?? "100");
+    const offset =
+      Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.floor(limitRaw), 1), 200)
+      : 100;
 
-    const batchUpdates: BatchItem<"sqlite">[] = [];
+    const db = drizzle(getD1(c));
+    const rows = await db
+      .select()
+      .from(cards)
+      .orderBy(asc(cards.id))
+      .limit(limit)
+      .offset(offset)
+      .all();
 
-    for (const item of actions) {
-      if (item.action === "REVIEW_CARD") {
-        const { id, nextState } = item.payload;
-
-        const setData: Partial<typeof cards.$inferInsert> = {
-          due: new Date(nextState.due),
-          state: nextState.state,
-          stability: nextState.stability,
-          difficulty: nextState.difficulty,
-          elapsed_days: nextState.elapsed_days,
-          scheduled_days: nextState.scheduled_days,
-          reps: nextState.reps,
-          lapses: nextState.lapses,
-          last_review: nextState.last_review
-            ? new Date(nextState.last_review)
-            : null,
-        };
-
-        if (item.payload.category) {
-          setData.category = item.payload.category;
-        }
-
-        const updateQuery = db
-          .update(cards)
-          .set(setData)
-          .where(drizzleEq(cards.id, id));
-
-        batchUpdates.push(updateQuery);
-      }
-    }
-
-    if (batchUpdates.length > 0) {
-      await db.batch(
-        batchUpdates as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]],
-      );
-    }
-
-    return c.json({ success: true, processed: batchUpdates.length });
+    return c.json({ cards: rows, hasMore: rows.length === limit });
   });
 
 // ===========================================================================
@@ -476,7 +468,8 @@ async function handleCreateCard(
   db: D1Db,
 ) {
   const card = buildInsertCard(args.front, args.back, args.category, new Date());
-  return await db.insert(cards).values(card).returning().get();
+  await db.insert(cards).values(card).run();
+  return await db.select().from(cards).where(eq(cards.id, card.id as string)).get();
 }
 
 async function handleUpdateCard(
@@ -533,7 +526,16 @@ async function handleBulkCreateCards(
   const rows: typeof cards.$inferInsert[] = args.cards.map((c) =>
     buildInsertCard(c.front, c.back, c.category, now),
   );
-  const created = await db.insert(cards).values(rows).returning().all();
+  const chunkSize = 6;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+      await db
+        .insert(cards)
+        .values(rows.slice(i, i + chunkSize))
+        .onConflictDoNothing()
+        .run();
+  }
+  const ids = rows.map((r) => r.id as string);
+  const created = await db.select().from(cards).where(or(...ids.map((id) => eq(cards.id, id)))).all();
   return { created, count: created.length };
 }
 
@@ -671,7 +673,7 @@ async function handleReviewCard(
     difficulty: existing.difficulty,
     elapsed_days: existing.elapsed_days,
     scheduled_days: existing.scheduled_days,
-    learning_steps: 0,
+    learning_steps: existing.learning_steps ?? 0,
     reps: existing.reps,
     lapses: existing.lapses,
     state: existing.state as FSRSCard["state"],
@@ -688,6 +690,7 @@ async function handleReviewCard(
     state: nextState.state,
     elapsed_days: nextState.elapsed_days,
     scheduled_days: nextState.scheduled_days,
+    learning_steps: nextState.learning_steps,
     reps: nextState.reps,
     lapses: nextState.lapses,
     last_review: nextState.last_review,
@@ -710,7 +713,14 @@ async function handleImportCards(
   const rows: typeof cards.$inferInsert[] = args.cards.map((c) =>
     buildInsertCard(c.front, c.back, c.category, now),
   );
-  await db.insert(cards).values(rows).run();
+  const chunkSize = 6;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+      await db
+        .insert(cards)
+        .values(rows.slice(i, i + chunkSize))
+        .onConflictDoNothing()
+        .run();
+  }
   return { imported: rows.length };
 }
 
@@ -905,7 +915,7 @@ const mcpRoutes = routes
 
       try {
         const args = tool.schema.parse(params?.arguments ?? {});
-        const db = drizzle(c.env.DB);
+        const db = drizzle(getD1(c));
         const result = await (tool.handler as (
           a: typeof args,
           d: D1Db,
@@ -918,8 +928,13 @@ const mcpRoutes = routes
           },
         });
       } catch (error) {
+        const err = error as Error & { cause?: unknown; message?: string };
+        const cause = err.cause as { message?: string; toString?: () => string } | undefined;
+        const causeMsg = cause?.message ?? (cause ? String(cause) : "no cause");
         const message =
-          error instanceof Error ? error.message : JSON.stringify(error);
+          err instanceof Error
+            ? `${err.message}\ncauseMsg: ${causeMsg}\ncauseStr: ${String(err.cause)}\nstack: ${err.stack?.slice(0, 800)}`
+            : JSON.stringify(error, null, 2);
         return c.json({
           jsonrpc: "2.0",
           id,

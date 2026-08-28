@@ -492,7 +492,7 @@ function reviewCard(args: z.infer<typeof ReviewCardArgsSchema>) {
     difficulty: existing.difficulty,
     elapsed_days: existing.elapsed_days,
     scheduled_days: existing.scheduled_days,
-    learning_steps: 0,
+    learning_steps: existing.learning_steps ?? 0,
     reps: existing.reps,
     lapses: existing.lapses,
     state: existing.state as FSRSCard["state"],
@@ -507,6 +507,7 @@ function reviewCard(args: z.infer<typeof ReviewCardArgsSchema>) {
     state: nextState.state,
     elapsed_days: nextState.elapsed_days,
     scheduled_days: nextState.scheduled_days,
+    learning_steps: nextState.learning_steps,
     reps: nextState.reps,
     lapses: nextState.lapses,
     last_review: nextState.last_review,
@@ -534,7 +535,12 @@ function exportCards(args: z.infer<typeof ExportCardsArgsSchema>) {
   if (args.format === "csv") {
     const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
     const lines = rows.map((r) =>
-      [escape(r.front), escape(r.back), escape(r.category), r.due.toISOString()].join(","),
+      [
+        escape(r.front),
+        escape(r.back),
+        escape(r.category),
+        r.due instanceof Date ? r.due.toISOString() : new Date(r.due).toISOString(),
+      ].join(","),
     );
     return ["front,back,category,due", ...lines].join("\n");
   }

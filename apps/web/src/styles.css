@@ -1,37 +1,119 @@
 /*
- * DESIGN READ: Systems Architecture — Neuform Featured, Meng To
- * Dark theme with lime primary, purple accent, bento/WebGL character.
+ * Kata — Kosakata Harian. Modern playful, dual theme (light/dark).
+ * Token semantik via CSS variables; utility Tailwind v4 @theme inline
+ * merujuk langsung ke var sehingga tema berubah runtime (class .dark di <html>).
  *
- * DIALS: DESIGN_VARIANCE=8, MOTION_INTENSITY=6, VISUAL_DENSITY=7
- * FOUNDATION: Tailwind v4 + CSS animations (no motion/react)
- * PRIMARY: #C7F300 lime
- * ACCENT: #4330C2 purple
- * SHAPE: rounded-[8px] cards/controls, pill 9999px
- * TYPOGRAPHY: Inter display/body, JetBrains Mono labels
+ * PALET: primary biru #4C8DFF · accent amber #E8A13C · success hijau ·
+ * danger merah · ink/paper netral. Emoji tidak dipakai — ikon SVG (Icon.tsx).
  */
 
 @import "tailwindcss";
 
-@theme {
-  /* --- Colors: DESIGN.md tokens --- */
-  --color-primary: #C7F300;
-  --color-primary-hover: #d4f733;
-  --color-secondary: #4330C2;
-  --color-secondary-hover: #5544d4;
-  --color-bg: #050505;
-  --color-surface: #4C4C4C;
-  --color-surface-hover: #5a5a5a;
-  --color-text: #FFFFFF;
-  --color-text-secondary: #A1A1AA;
-  --color-border: #4C4C4C;
+/* Dark mode di-drive oleh class `.dark` (toggle manual, bukan prefers-color-scheme) */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  /* --- Typography --- */
-  --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
+:root {
+  /* --- Surfaces --- */
+  --background: #f6f6f3;
+  --surface: #ffffff;
+  --surface-2: #efefea;
+  --ink: #17171b;
+  --muted: #5f5f69;
+  --edge: #e4e4de;
 
-  /* --- Radius --- */
-  --radius-card: 8px;
-  --radius-control: 8px;
+  /* --- Brand --- */
+  --primary: #4c8dff;
+  --primary-hover: #3b7de8;
+  --accent: #e8a13c;
+  --accent-ink: #8a5809;
+  --success: #2fa84f;
+  --warning: #e8a13c;
+  --danger: #e5484d;
+
+  /* --- Rating (pastel light) --- */
+  --rating-again-bg: #fdecec;
+  --rating-again-border: #f7c8c9;
+  --rating-again-text: #d63b41;
+  --rating-hard-bg: #fdf3e3;
+  --rating-hard-border: #f3d9b0;
+  --rating-hard-text: #a86a10;
+  --rating-good-bg: #e9f7ee;
+  --rating-good-border: #bfe3cb;
+  --rating-good-text: #1f8a3d;
+  --rating-easy-bg: #eaf2ff;
+  --rating-easy-border: #c5d9f7;
+  --rating-easy-text: #2b6fe0;
+
+  /* --- Effects --- */
+  --glow-a: rgba(76, 141, 255, 0.1);
+  --glow-b: rgba(232, 161, 60, 0.08);
+  --glow-c: rgba(47, 168, 79, 0.06);
+  --skeleton-a: #e8e8e2;
+  --skeleton-b: #deded6;
+  --shadow-card: 0 10px 32px rgba(23, 23, 27, 0.08);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0f0f13;
+  --surface: #1a1a20;
+  --surface-2: #232329;
+  --ink: #f2f2ef;
+  --muted: #9b9ba6;
+  --edge: #2a2a31;
+
+  --primary: #5e9cff;
+  --primary-hover: #74aaff;
+  --accent: #e8a13c;
+  --accent-ink: #e8a13c;
+  --success: #3ec260;
+  --warning: #e8a13c;
+  --danger: #f2555a;
+
+  --rating-again-bg: #2a1b1d;
+  --rating-again-border: #4a2a2d;
+  --rating-again-text: #f07075;
+  --rating-hard-bg: #2a2116;
+  --rating-hard-border: #4a3a20;
+  --rating-hard-text: #e8a13c;
+  --rating-good-bg: #16261b;
+  --rating-good-border: #23442c;
+  --rating-good-text: #4ccd70;
+  --rating-easy-bg: #16233a;
+  --rating-easy-border: #24374f;
+  --rating-easy-text: #6fa8ff;
+
+  --glow-a: rgba(94, 156, 255, 0.14);
+  --glow-b: rgba(232, 161, 60, 0.1);
+  --glow-c: rgba(62, 194, 96, 0.08);
+  --skeleton-a: #232329;
+  --skeleton-b: #2a2a31;
+  --shadow-card: 0 10px 32px rgba(0, 0, 0, 0.4);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-edge: var(--edge);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --font-sans: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace,
+    monospace;
+
+  --radius-card: 20px;
+  --radius-control: 12px;
   --radius-pill: 9999px;
 }
 
@@ -45,26 +127,30 @@ html {
 }
 
 html,
-body,
-#app {
+body {
   min-height: 100%;
+  background-color: var(--background);
 }
 
 body {
   margin: 0;
-  background-color: var(--color-bg);
-  color: var(--color-text);
+  color: var(--ink);
+  transition: background-color 0.25s ease, color 0.25s ease;
+  /* Safe area untuk PWA standalone di iOS */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
-/* --- Radial gradient effect layer (WebGL stand-in) --- */
+/* --- Ambient glow (supporting layer) --- */
 .effect-glow {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(ellipse 60% 40% at 20% 10%, rgba(199, 243, 0, 0.06) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 50% at 80% 80%, rgba(67, 48, 194, 0.08) 0%, transparent 70%);
+    radial-gradient(ellipse 55% 38% at 18% 8%, var(--glow-a) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 42% at 85% 88%, var(--glow-b) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 25% at 78% 15%, var(--glow-c) 0%, transparent 70%);
 }
 
 /* --- Card flip animation --- */
@@ -94,17 +180,20 @@ body {
 
 /* --- Tactile button press --- */
 .tactile-btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
-/* --- Hover lift for cards --- */
+/* --- Hover lift for cards (desktop enhancement only) --- */
 .hover-lift {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+@media (hover: hover) {
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+  }
 }
 
 /* --- Staggered entrance animation --- */
@@ -123,15 +212,11 @@ body {
   animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Stagger delays for bento grid items */
 .stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.10s; }
+.stagger-2 { animation-delay: 0.1s; }
 .stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.20s; }
+.stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.30s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.40s; }
 
 /* --- Masked reveal for hero --- */
 @keyframes masked-reveal {
@@ -149,28 +234,83 @@ body {
   animation: masked-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* --- Skeleton shimmer --- */
+/* --- Poin pop feedback saat review --- */
+@keyframes coin-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-14px) scale(1);
+  }
+}
+
+.animate-coin-pop {
+  animation: coin-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* --- Spin di layar sync gate --- */
+@keyframes compass-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-compass-spin {
+  animation: compass-spin 6s linear infinite;
+}
+
+/* --- Pulse lembut untuk badge Kata Siap --- */
+@keyframes soft-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 2.2s ease-in-out infinite;
+}
+
+/* --- Skeleton shimmer (adaptive theme) --- */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-a) 25%,
+    var(--skeleton-b) 50%,
+    var(--skeleton-a) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-card);
 }
 
-/* --- Scrollbar styling (dark) --- */
+/* --- Scrollbar styling --- */
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-bg);
+  background: var(--background);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-surface);
+  background: var(--edge);
   border-radius: 3px;
 }
 
@@ -192,10 +332,49 @@ body {
     transform: none;
     box-shadow: none;
   }
-  .animate-fade-in-up {
+  .animate-fade-in-up,
+  .animate-masked-reveal,
+  .animate-coin-pop,
+  .animate-compass-spin,
+  .animate-soft-pulse {
     animation: none;
   }
-  .animate-masked-reveal {
-    animation: none;
-  }
+}
+
+/* --- Keyboard Shortcut Hint Badge --- */
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background-color: var(--surface-2);
+  border: 1px solid var(--edge);
+  color: var(--muted);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* --- Stage Badges --- */
+.stage-easy {
+  background-color: rgba(47, 168, 79, 0.12);
+  color: var(--success);
+}
+.stage-medium {
+  background-color: rgba(76, 141, 255, 0.12);
+  color: var(--primary);
+}
+.stage-advance {
+  background-color: rgba(138, 88, 240, 0.14);
+  color: #9065f0;
+}
+.stage-native {
+  background-color: rgba(232, 161, 60, 0.14);
+  color: var(--accent);
+}
+.stage-general {
+  background-color: rgba(100, 116, 139, 0.12);
+  color: var(--muted);
 }

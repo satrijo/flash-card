@@ -90,11 +90,13 @@ codedb.snapshot
 .agents
 .opencode/node_modules
 .opencode/*.log
+.commandcode
 
 # ===== Testing / Coverage =====
 coverage
 .nyc_output
 .jest
+.playwright-mcp
 
 # ===== Misc =====
 .cache

@@ -1,6 +1,7 @@
 // apps/web/app/lib/api.ts
-import { hc } from "hono/client";
+
 import type { AppType } from "@flashcard/api"; // Mengambil type secara langsung dari backend
+import { hc } from "hono/client";
 
 // Masukkan URL lokal dari wrangler (default Hono Workers: 8787)
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8787";

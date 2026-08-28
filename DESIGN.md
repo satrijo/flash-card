@@ -1,76 +1,69 @@
 ---
-version: "neuform-top-creators-featured"
-name: "Systems Architecture"
-description: "Systems Architecture FAQ Section is designed for building reusable UI components in modern web projects. Key features include reusable layout structure, responsive behavior, and production-ready styling. Built with custom CSS, it is suitable for component libraries and responsive product interfaces."
+version: "light-playful-safari"
+name: "Safari Kata — Light Playful"
+description: "Tema gamifikasi petualangan yang hangat dan ramah: krem hangat, oranye matahari, hijau daun. Mobile-first untuk PWA flashcard offline-first."
 colors:
-  primary: "#C7F300"
-  secondary: "#4330C2"
-  accent: "#4330C2"
-  background: "#050505"
-  surface: "#4C4C4C"
-  text-primary: "#FFFFFF"
-  text-secondary: "#A1A1AA"
-  border: "#4C4C4C"
+  primary: "#FF8A3D"
+  primary-hover: "#F0761F"
+  secondary: "#3FA34D"
+  accent: "#2F80ED"
+  coin: "#F7C948"
+  danger: "#E4572E"
+  category-badge: "#4330C2"
+  background: "#FDF6EC"
+  surface: "#FFFFFF"
+  border: "#EADFD0"
+  text-primary: "#2D2A26"
+  text-secondary: "#8A8177"
 typography:
-  display-lg:
+  display:
     fontFamily: "Inter"
-    fontSize: "64px"
-    fontWeight: 500
-    lineHeight: "1.04"
-    letterSpacing: "0"
-  body-md:
+    fontWeight: 800
+    tracking: "tight"
+  body:
     fontFamily: "Inter"
     fontSize: "16px"
     fontWeight: 400
-    lineHeight: "1.6"
-  label-md:
+  label:
     fontFamily: "JetBrains Mono"
-    fontSize: "12px"
-    fontWeight: 600
-    lineHeight: "1.2"
+    fontSize: "11-12px"
+    fontWeight: 700
+    transform: "uppercase"
 spacing:
   base: "8px"
-  gap: "16px"
-  card-padding: "24px"
-  section-padding: "80px"
+  card-padding: "20px"
+  page-max: "28rem (mobile) / 48rem (md)"
 rounded:
-  card: "8px"
-  control: "8px"
+  card: "20px"
+  control: "12px"
   pill: "9999px"
 components:
-  card:
-    background: "Use the surface token with subtle borders and HTML-matched shadow depth"
-    radius: "Match the declared card radius token"
-  button:
-    background: "Use primary or accent colors for the main action"
-    radius: "Use the control or pill radius based on the source HTML"
+  card: "Putih, border #EADFD0, shadow lembut warm, radius 20px"
+  button-primary: "#FF8A3D, teks putih bold, radius 12px, active scale 0.98"
+  toggle: "pill 56x32, ON hijau #3FA34D"
+  ring-progress: "SVG stroke #3FA34D di track #EADFD0"
+  habitat-badge: "mono uppercase, bg #4330C2 putih"
 ---
-# Systems Architecture
-Source: Neuform Featured templates from top creators. Author: Meng To (@mengto). Views: 6; favorites: 4; remixes: 1.
-Tags: faq, section, support, animated, webgl, bento, links, effect.
-## Overview
-Systems Architecture FAQ Section is designed for building reusable UI components in modern web projects. Key features include reusable layout structure, responsive behavior, and production-ready styling. Built with custom CSS, it is suitable for component libraries and responsive product interfaces.
-
-[ COGNITIVE ENGINE ] Logic emerges from patterns. Every capability we deploy begins with a foundational question: How do we render complexity entirely invisible? View Architecture Core Modules [ ENGINEERED FOR SCALE ] S…
-## Composition
-Use the attached HTML reference as the source of truth. Preserve the visible hierarchy, first-screen composition, section rhythm, density, and interaction tone before adapting copy or content.
-Key visible headings include: Logic emerges from patterns.; Structure dictates function.; Accuracy you can measure..
+# Safari Kata — Light Playful
+Design system untuk PWA flashcard gamifikasi offline-first. Menggantikan tema lama (Ecosystem orange & dark+lime).
+## Kosakata gamifikasi (WAJIB di UI, dilarang istilah teknis)
+- category → **Habitat**
+- review session → **Ekspedisi**
+- XP → **Koin** 🪙
+- streak → **Jejak Harian** 🐾
+- due cards → **Kata Siap**
+- daily goal → **Target Harian**
+- mastery % → **Kekuatan Habitat**
+- FSRS/IndexedDB/sync/server → tidak pernah tampil
 ## Colors
-Anchor the palette in primary #C7F300, secondary #4330C2, accent #4330C2, background #050505, surface #4C4C4C, text-primary #FFFFFF. Keep background, surface, text, and border roles distinct so generated layouts retain the same contrast pattern as the source.
+Anchor: background krem `#FDF6EC`, surface putih, primary oranye `#FF8A3D` (aksi utama), hijau `#3FA34D` (progress/sukses), biru `#2F80ED` (aksen/unduh), kuning koin `#F7C948`, bata `#E4572E` (Again/danger), ungu `#4330C2` khusus badge kategori. Jangan swap peran warna.
 ## Typography
-Use Inter for display moments and Inter for body copy unless the HTML clearly demands a compatible fallback. Labels and technical metadata should use JetBrains Mono or an equivalent mono face.
+Inter untuk semua teks (800 untuk display/angka besar), JetBrains Mono 11-12px bold uppercase untuk label kecil dan angka progress.
 ## Layout
-Keep spacing deliberate and stable. Favor the same grid direction, max-width behavior, card density, and responsive stacking seen in the HTML. Do not replace distinctive source structures with generic SaaS sections.
-## Components
-Cards, buttons, badges, navigation, and repeated blocks should preserve the source geometry, border treatment, and hover feel.
+Mobile-first: max-width 28rem di mobile, 48rem di md+. Bottom tab bar (thumb zone) di mobile, header ramping 56px. Target sentuh ≥ 44px. Safe-area insets wajib (PWA standalone iOS).
 ## Motion
-Preserve existing motion cues such as masked reveals, staggered entrance, hover lift, scroll-triggered transitions, and ambient movement. Keep easing smooth and restrained.
-## WebGL & Effects
-
-If the source includes canvas, WebGL, Three.js, gradients, particles, or atmospheric effects, rebuild them as supporting layers behind the content. Keep effects performant, responsive, and secondary to the interface.
-
+Fade-in-up staggered, flip kartu 0.4s spring-ish `cubic-bezier(0.16,1,0.3,1)`, koin pop dengan overshoot, kompas berputar pelan di layar sync. Semua dimatikan via `prefers-reduced-motion`.
 ## Guardrails
-- Do not flatten the source into a generic card grid.
-- Do not swap the color mode unless the source clearly supports it.
-- Preserve the first viewport signal, focal object, and visual density.
-- Keep buttons, cards, and badges aligned to the same radius and border language.
+- Jangan pakai dark mode atau neon; tema ini light warm.
+- Jangan tampilkan istilah teknis (FSRS, sync, cloud, IndexedDB) di UI mana pun.
+- Palet primary/secondary lock; jangan ditukar.

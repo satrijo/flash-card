@@ -162,6 +162,22 @@ export declare const cards: import("drizzle-orm/sqlite-core").SQLiteTableWithCol
             identity: undefined;
             generated: undefined;
         }, {}>;
+        learning_steps: import("drizzle-orm/sqlite-core").SQLiteColumn<{
+            name: string;
+            tableName: "cards";
+            dataType: "number int53";
+            data: number;
+            driverParam: number;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}>;
         reps: import("drizzle-orm/sqlite-core").SQLiteColumn<{
             name: string;
             tableName: "cards";
