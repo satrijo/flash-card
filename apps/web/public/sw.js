@@ -7,7 +7,7 @@
  * Data belajar TIDAK disentuh SW — itu wilayah IndexedDB/Dexie.
  */
 
-const VERSION = "kata-v2";
+const VERSION = "kata-v3";
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
 

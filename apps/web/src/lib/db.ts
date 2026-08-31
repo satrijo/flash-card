@@ -36,11 +36,53 @@ export interface MetaEntry {
 	value: unknown;
 }
 
+// Pesan obrolan komunitas realtime lokal
+export interface CommunityMessage {
+	id: string;
+	username: string;
+	deviceId: string;
+	content: string;
+	flashcardRef?: {
+		front: string;
+		back: string;
+		category: string;
+	};
+	timestamp: number;
+}
+
+// Log kata individual dalam sesi latihan
+export interface PracticeCardLog {
+	id: string;
+	front: string;
+	back: string;
+	category: string;
+	rating: number; // 1=Again, 2=Hard, 3=Good, 4=Easy
+}
+
+// Riwayat sesi latihan kosakata lengkap
+export interface PracticeSessionRecord {
+	id?: number;
+	timestamp: number;
+	tahap?: string;
+	wordsCount: number;
+	reviewCount: number;
+	xpGained: number;
+	ratings: {
+		again: number;
+		hard: number;
+		good: number;
+		easy: number;
+	};
+	cards: PracticeCardLog[];
+}
+
 const db = new Dexie("FlashcardDB") as Dexie & {
 	cards: EntityTable<LocalCard, "id">;
 	gameStats: EntityTable<GameStats, "id">;
 	habitats: EntityTable<HabitatQuota, "category">;
 	meta: EntityTable<MetaEntry, "key">;
+	communityMessages: EntityTable<CommunityMessage, "id">;
+	practiceHistory: EntityTable<PracticeSessionRecord, "id">;
 };
 
 // Versi lama (1–4) dipertahankan agar upgrade device existing tidak destruktif.
@@ -62,5 +104,24 @@ db.version(5)
 		// Buang sisa antrean upload dari model lama — tidak pernah dikirim.
 		await tx.table("syncQueue").clear();
 	});
+
+// v6: Community Chat messages table
+db.version(6).stores({
+	cards: "id, due, category",
+	gameStats: "id",
+	habitats: "category",
+	meta: "key",
+	communityMessages: "id, timestamp",
+});
+
+// v7: Riwayat Sesi Latihan Kosakata
+db.version(7).stores({
+	cards: "id, due, category",
+	gameStats: "id",
+	habitats: "category",
+	meta: "key",
+	communityMessages: "id, timestamp",
+	practiceHistory: "++id, timestamp, tahap",
+});
 
 export { db };

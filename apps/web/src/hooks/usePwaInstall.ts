@@ -1,73 +1,101 @@
 /*
- * usePwaInstall — prompt instalasi PWA, mobile only.
- * Android: tangkap beforeinstallprompt → prompt() native.
- * iOS: tidak ada event install → fallback instruksi manual 3 langkah.
- * Desktop: tidak ada code path (guard isMobile langsung return).
+ * usePwaInstall — hook PWA install untuk Android, iOS, dan Desktop (Chrome/Edge/Brave).
+ * Menggunakan module-level singleton listener agar event beforeinstallprompt tidak pernah hilang.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
 	prompt(): Promise<void>;
 	userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
-const NAG_KEY = "pwa-install-dismissed";
 const DONE_KEY = "pwa-install-done";
-const NAG_WINDOW_MS = 3 * 864e5; // 3 hari
-const IOS_FALLBACK_MS = 4000;
+const SESSION_DISMISSED_KEY = "pwa-session-dismissed";
 
-export type InstallTarget = "android" | "ios";
+export type InstallTarget = "native" | "ios" | "desktop-manual" | "manual";
 
 export interface PwaInstallState {
 	isMobile: boolean;
 	isInstalled: boolean;
-	canInstall: InstallTarget | null;
-	show: boolean;
+	canInstall: InstallTarget;
+	isOpen: boolean;
 	accepted: boolean;
-	dismiss: () => void;
+	openModal: () => void;
+	closeModal: () => void;
 	install: () => Promise<void>;
+}
+
+// Module-level singleton agar event tidak terlewat jika komponen me-mount belakangan
+let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
+let isModalOpen = false;
+const promptListeners = new Set<() => void>();
+
+function notifyPromptListeners() {
+	for (const fn of promptListeners) {
+		fn();
+	}
+}
+
+if (typeof window !== "undefined") {
+	window.addEventListener("beforeinstallprompt", (event) => {
+		event.preventDefault();
+		globalDeferredPrompt = event as BeforeInstallPromptEvent;
+		notifyPromptListeners();
+	});
+
+	window.addEventListener("appinstalled", () => {
+		globalDeferredPrompt = null;
+		isModalOpen = false;
+		try {
+			localStorage.setItem(DONE_KEY, String(Date.now()));
+		} catch {}
+		notifyPromptListeners();
+	});
 }
 
 function isIOS(): boolean {
 	if (typeof navigator === "undefined") return false;
 	if (/iP(hone|ad|od)/.test(navigator.userAgent)) return true;
-	// iPad modern pakai UA Macintosh + layar sentuh.
 	return /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
 }
 
-function readNagTimestamp(): number | null {
-	if (typeof localStorage === "undefined") return null;
-	try {
-		const raw = localStorage.getItem(NAG_KEY);
-		if (!raw) return null;
-		const ts = Number(raw);
-		return Number.isFinite(ts) ? ts : null;
-	} catch {
-		return null;
+function detectInstalled(): boolean {
+	if (typeof window === "undefined") return false;
+	return (
+		window.matchMedia("(display-mode: standalone)").matches ||
+		("standalone" in navigator &&
+			(navigator as unknown as { standalone?: boolean }).standalone === true)
+	);
+}
+
+function getTarget(): InstallTarget {
+	if (globalDeferredPrompt !== null) return "native";
+	if (isIOS()) return "ios";
+	if (typeof window !== "undefined") {
+		const isMobile =
+			window.matchMedia("(pointer: coarse)").matches ||
+			window.innerWidth < 1024;
+		if (!isMobile) return "desktop-manual";
 	}
+	return "manual";
 }
 
 export function usePwaInstall(): PwaInstallState {
 	const [isMobile, setIsMobile] = useState(false);
 	const [isInstalled, setIsInstalled] = useState(false);
-	const [canInstall, setCanInstall] = useState<InstallTarget | null>(null);
-	const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+	const [isOpen, setIsOpen] = useState(isModalOpen);
 	const [accepted, setAccepted] = useState(false);
-	const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
+	const [canInstall, setCanInstall] = useState<InstallTarget>(getTarget);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 
 		const mobile =
-			window.matchMedia("(pointer: coarse)").matches &&
-			window.innerWidth < 1024;
+			window.matchMedia("(pointer: coarse)").matches ||
+			window.innerWidth < 1024 ||
+			isIOS();
 		setIsMobile(mobile);
-
-		const detectInstalled = () =>
-			window.matchMedia("(display-mode: standalone)").matches ||
-			("standalone" in navigator &&
-				(navigator as unknown as { standalone?: boolean }).standalone === true);
 
 		const installed = detectInstalled();
 		setIsInstalled(installed);
@@ -77,74 +105,82 @@ export function usePwaInstall(): PwaInstallState {
 			} catch {}
 		}
 
-		setDismissedAt(readNagTimestamp());
+		setCanInstall(getTarget());
 
-		// Desktop / sudah terpasang: berhenti di sini.
-		if (!mobile || installed) return;
+		// Auto-open modal di mobile saat first load jika belum pernah di-dismiss di sesi ini
+		const sessionDismissed = sessionStorage.getItem(SESSION_DISMISSED_KEY);
+		if (mobile && !installed && !sessionDismissed && !isModalOpen) {
+			isModalOpen = true;
+			setIsOpen(true);
+		}
 
-		const onBeforeInstallPrompt = (event: Event) => {
-			event.preventDefault();
-			deferredPrompt.current = event as BeforeInstallPromptEvent;
-			setCanInstall("android");
+		const handleStateChange = () => {
+			const currentInstalled = detectInstalled();
+			setIsInstalled(currentInstalled);
+			setCanInstall(getTarget());
+			setIsOpen(isModalOpen);
 		};
-		window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
 
-		// iOS tidak memunculkan beforeinstallprompt — fallback instruksi manual.
-		const fallbackTimer = window.setTimeout(() => {
-			if (deferredPrompt.current === null && isIOS()) {
-				setCanInstall("ios");
-			}
-		}, IOS_FALLBACK_MS);
+		promptListeners.add(handleStateChange);
 
 		const onVisibilityChange = () => {
 			if (document.visibilityState !== "visible") return;
-			// User bisa meng-install dari tab lain — berhenti menawarkan.
 			if (detectInstalled()) {
 				setIsInstalled(true);
-				setCanInstall(null);
-				deferredPrompt.current = null;
+				isModalOpen = false;
+				globalDeferredPrompt = null;
+				notifyPromptListeners();
 			}
 		};
 		document.addEventListener("visibilitychange", onVisibilityChange);
 
 		return () => {
-			window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+			promptListeners.delete(handleStateChange);
 			document.removeEventListener("visibilitychange", onVisibilityChange);
-			window.clearTimeout(fallbackTimer);
 		};
 	}, []);
 
-	const show =
-		isMobile &&
-		!isInstalled &&
-		canInstall !== null &&
-		(dismissedAt === null || Date.now() - dismissedAt >= NAG_WINDOW_MS);
+	const openModal = () => {
+		isModalOpen = true;
+		setIsOpen(true);
+		notifyPromptListeners();
+	};
 
-	const dismiss = () => {
-		setDismissedAt(Date.now());
+	const closeModal = () => {
+		isModalOpen = false;
+		setIsOpen(false);
 		try {
-			localStorage.setItem(NAG_KEY, String(Date.now()));
+			sessionStorage.setItem(SESSION_DISMISSED_KEY, "true");
 		} catch {}
+		notifyPromptListeners();
 	};
 
 	const install = async () => {
-		const event = deferredPrompt.current;
-		if (!event) return;
-		deferredPrompt.current = null;
-		await event.prompt();
-		const choice = await event.userChoice;
-		if (choice.outcome === "accepted") {
-			setIsInstalled(true);
-			setCanInstall(null);
-			setAccepted(true);
-			try {
-				localStorage.setItem(DONE_KEY, String(Date.now()));
-			} catch {}
-			// Auto-close perayaan kecil.
-			window.setTimeout(() => setAccepted(false), 1800);
-		} else {
-			// Native prompt ditolak — event sekali pakai, jangan tawarkan lagi.
-			setCanInstall(null);
+		const event = globalDeferredPrompt;
+		if (!event) {
+			// Jika native prompt belum ready (misal di iOS atau manual), buka modal panduan
+			openModal();
+			return;
+		}
+		try {
+			await event.prompt();
+			const choice = await event.userChoice;
+			if (choice.outcome === "accepted") {
+				globalDeferredPrompt = null;
+				setIsInstalled(true);
+				setAccepted(true);
+				try {
+					localStorage.setItem(DONE_KEY, String(Date.now()));
+				} catch {}
+				window.setTimeout(() => {
+					setAccepted(false);
+					closeModal();
+				}, 2000);
+			} else {
+				closeModal();
+			}
+		} catch {
+			closeModal();
 		}
 	};
 
@@ -152,9 +188,10 @@ export function usePwaInstall(): PwaInstallState {
 		isMobile,
 		isInstalled,
 		canInstall,
-		show,
+		isOpen,
 		accepted,
-		dismiss,
+		openModal,
+		closeModal,
 		install,
 	};
 }

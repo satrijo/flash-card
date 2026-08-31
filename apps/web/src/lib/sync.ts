@@ -136,7 +136,7 @@ export async function runSync(options?: { force?: boolean }): Promise<void> {
 	if (started) return;
 	const cardCount = await db.cards.count();
 
-	if (!navigator.onLine) {
+	if (typeof navigator !== "undefined" && !navigator.onLine) {
 		if (cardCount === 0) {
 			const seeded = await loadBundledSeed();
 			if (!seeded) {
@@ -159,9 +159,11 @@ export async function runSync(options?: { force?: boolean }): Promise<void> {
 		if (!needDownload) {
 			let res: Response;
 			try {
-				res = await fetch(`${apiUrl()}/api/deck/version`);
+				res = await fetch(`${apiUrl()}/api/deck/version`, {
+					signal: AbortSignal.timeout(3000),
+				});
 			} catch (fetchErr) {
-				// API server down / unreachable — fallback ke seed lokal jika kosong
+				// API server down / unreachable / timeout — fallback ke seed lokal jika kosong
 				if (cardCount === 0) {
 					const seeded = await loadBundledSeed();
 					if (seeded) return;

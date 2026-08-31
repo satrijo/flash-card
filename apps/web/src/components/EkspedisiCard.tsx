@@ -1,8 +1,8 @@
 /*
- * EkspedisiCard — kartu flip depan(kata EN)/belakang(arti ID).
- * TTS: autoplay kata depan saat muncul (jika suara aktif),
- * tombol speaker di dua sisi. Rating playful: Ulang/Susah/Oke/Gampang
- * dengan hint interval hasil FSRS + keyboard shortcuts (Space/1/2/3/4/S).
+ * EkspedisiCard — kartu flashcard SRS dual-side (depan EN / belakang ID).
+ * Desain: Modern Minimalist & Clean Editorial.
+ * Fitur: TTS otomatis/manual, hierarki tipografi tegas, label kelas kata POS,
+ * callout contoh kalimat beraksen, serta 4 tombol ulasan ergonomis FSRS.
  */
 
 import { fsrsEngine, Rating } from "@flashcard/shared";
@@ -26,28 +26,60 @@ interface EkspedisiCardProps {
 	onReviewComplete: (result: { xpGained: number; rating: Rating }) => void;
 }
 
-function formatInterval(due: Date, now: Date): string {
+export function formatInterval(due: Date, now: Date): string {
 	const diffMs = due.getTime() - now.getTime();
-	if (diffMs < 60 * 1000) return "< 1 mnt";
-	if (diffMs < 60 * 60 * 1000)
-		return `~${Math.round(diffMs / (60 * 1000))} mnt`;
-	if (diffMs < 24 * 60 * 60 * 1000)
-		return `~${Math.round(diffMs / (60 * 60 * 1000))} jam`;
-	return `~${Math.round(diffMs / (24 * 60 * 60 * 1000))} hari`;
+	if (diffMs <= 0) return "segera";
+	const diffMins = Math.round(diffMs / (60 * 1000));
+	if (diffMins < 1) return "< 1 mnt";
+	if (diffMins < 60) return `${diffMins} mnt`;
+	const diffHours = Math.round(diffMs / (60 * 60 * 1000));
+	if (diffHours < 24) return `${diffHours} jam`;
+	const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+	if (diffDays < 30) return `${diffDays} hr`;
+	if (diffDays < 365) {
+		const months = (diffDays / 30.4375).toFixed(1).replace(/\.0$/, "");
+		return `${months} bln`;
+	}
+	const years = (diffDays / 365.25).toFixed(1).replace(/\.0$/, "");
+	return `${years} thn`;
 }
 
-function stateBadge(state: number): { label: string; tone: string } {
+function stateBadge(state: number): {
+	label: string;
+	dot: string;
+	tone: string;
+} {
 	switch (state) {
 		case 0:
-			return { label: "Baru", tone: "bg-primary/10 text-primary" };
+			return {
+				label: "Baru",
+				dot: "bg-primary",
+				tone: "bg-primary/10 text-primary border-primary/20",
+			};
 		case 1:
-			return { label: "Belajar", tone: "bg-accent/15 text-accent-ink" };
+			return {
+				label: "Belajar",
+				dot: "bg-amber-500",
+				tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+			};
 		case 2:
-			return { label: "Diingat", tone: "bg-success/10 text-success" };
+			return {
+				label: "Diingat",
+				dot: "bg-emerald-500",
+				tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+			};
 		case 3:
-			return { label: "Relearning", tone: "bg-danger/10 text-danger" };
+			return {
+				label: "Relearning",
+				dot: "bg-rose-500",
+				tone: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+			};
 		default:
-			return { label: "Baru", tone: "bg-primary/10 text-primary" };
+			return {
+				label: "Baru",
+				dot: "bg-primary",
+				tone: "bg-primary/10 text-primary border-primary/20",
+			};
 	}
 }
 
@@ -60,7 +92,7 @@ export function EkspedisiCard({
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [coinFeedback, setCoinFeedback] = useState<number | null>(null);
 
-	// Autoplay pengucapan kata depan saat kartu tampil.
+	// Autoplay pengucapan kata depan saat kartu tampil pertama kali
 	useEffect(() => {
 		if (!ttsEnabled) return;
 		void speak(card.front, "en-US");
@@ -105,7 +137,7 @@ export function EkspedisiCard({
 				const award = await awardReview(rating, now);
 				setCoinFeedback(award.xpGained);
 
-				// Beri waktu animasi poin terlihat sebelum pindah kartu.
+				// Beri waktu animasi poin terlihat sebelum beralih ke kartu berikutnya
 				setTimeout(() => {
 					setIsFlipped(false);
 					onReviewComplete({ xpGained: award.xpGained, rating });
@@ -119,7 +151,7 @@ export function EkspedisiCard({
 		[card, isSubmitting, onReviewComplete],
 	);
 
-	// Dukungan keyboard shortcuts (Space/Enter to flip, 1-4 for ratings, S for audio)
+	// Dukungan shortcut keyboard (Spasi/Enter untuk balik, 1-4 untuk nilai, S untuk audio)
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (
@@ -139,7 +171,7 @@ export function EkspedisiCard({
 			) {
 				e.preventDefault();
 				void speak(
-					isFlipped ? card.back : card.front,
+					isFlipped ? parsed.gloss || card.back : card.front,
 					isFlipped ? "id-ID" : "en-US",
 				);
 			} else if (isFlipped && !isSubmitting) {
@@ -161,7 +193,7 @@ export function EkspedisiCard({
 
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isFlipped, isSubmitting, card, handleFlip, handleReview]);
+	}, [isFlipped, isSubmitting, card, parsed.gloss, handleFlip, handleReview]);
 
 	const ratingButtons = [
 		{
@@ -199,115 +231,165 @@ export function EkspedisiCard({
 	] as const;
 
 	return (
-		<div className="w-full animate-fade-in-up relative">
-			{/* Poin melayang saat menjawab */}
+		<div className="w-full max-w-lg md:max-w-xl mx-auto animate-fade-in-up relative select-none">
+			{/* Poin XP melayang saat menjawab */}
 			{coinFeedback !== null && (
-				<span className="absolute top-0 right-2 z-10 animate-coin-pop pointer-events-none">
-					<span className="px-3 py-1 rounded-pill bg-accent text-accent-ink font-extrabold text-sm shadow-md inline-flex items-center gap-1">
-						<Icon name="star" className="w-4 h-4" />+{coinFeedback}
+				<div className="absolute -top-4 right-3 z-30 animate-coin-pop pointer-events-none">
+					<span className="px-3.5 py-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-500/30 inline-flex items-center gap-1.5 border border-amber-300/40">
+						<Icon name="star" className="w-4 h-4 fill-amber-950" />+
+						{coinFeedback} XP
 					</span>
-				</span>
+				</div>
 			)}
 
+			{/* Kartu Utama dengan 3D Perspective & Proporsi Alami */}
 			<div
-				className="relative bg-surface rounded-card border border-edge overflow-hidden shadow-sm hover-lift"
-				style={{ perspective: "1200px" }}
+				className="relative w-full h-[280px] xs:h-[300px] sm:h-[325px] md:h-[345px] max-h-[48dvh] bg-surface rounded-[20px] sm:rounded-[26px] border border-edge/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-[0_16px_36px_-8px_rgba(0,0,0,0.7)] transition-all duration-300 overflow-hidden"
+				style={{ perspective: "1400px" }}
 			>
 				<div
-					className={`flip-card-inner ${isFlipped ? "flipped" : ""}`}
-					style={{ minHeight: "400px" }}
+					className={`flip-card-inner w-full h-full ${isFlipped ? "flipped" : ""}`}
 				>
-					{/* Depan — kata Inggris */}
-					<div className="flip-card-front absolute inset-0 flex flex-col p-6 md:p-8">
-						<div className="flex items-center justify-between mb-4">
+					{/* ======================================================== */}
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: flashcard face container click-to-flip */}
+					{/* biome-ignore lint/a11y/useKeyWithClickEvents: handled via window keydown listener and action button */}
+					<div
+						onClick={() => {
+							if (!isFlipped) handleFlip();
+						}}
+						className="flip-card-front absolute inset-0 flex flex-col justify-between p-4 sm:p-5 md:p-6 bg-surface cursor-pointer overflow-hidden"
+					>
+						{/* Header Metadata Bar */}
+						<div className="flex items-center justify-between gap-3 shrink-0">
 							<div className="flex items-center gap-2">
 								<span
-									className={`inline-block font-mono text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-[8px] ${bandMeta.colorClass}`}
+									className={`inline-block font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-[6px] ${bandMeta.colorClass}`}
 								>
 									{bandMeta.title}
 								</span>
 								<span
-									className={`font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded-pill ${memoryState.tone}`}
+									className={`inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase px-2 py-0.5 rounded-pill border ${memoryState.tone}`}
 								>
+									<span
+										className={`w-1.5 h-1.5 rounded-full ${memoryState.dot}`}
+									/>
 									{memoryState.label}
 								</span>
 							</div>
+
 							<button
 								type="button"
-								onClick={() => void speak(card.front, "en-US")}
+								onClick={(e) => {
+									e.stopPropagation();
+									void speak(card.front, "en-US");
+								}}
 								aria-label="Dengarkan pengucapan kata"
 								title="Dengarkan pengucapan (Tekan S)"
-								className="w-11 h-11 inline-flex items-center justify-center rounded-full bg-surface-2 text-muted hover:text-primary active:scale-95 transition-transform"
+								className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shadow-2xs"
 							>
-								<Icon name="volume" className="w-5 h-5" />
+								<Icon name="volume" className="w-4 h-4" />
 							</button>
 						</div>
 
-						<div className="flex-1 flex flex-col items-center justify-center text-center px-2">
-							<h2 className="text-3xl md:text-5xl font-extrabold text-ink leading-tight max-w-lg break-words tracking-tight">
+						{/* Area Tengah: Kata Kosakata Utama */}
+						<div className="flex-1 flex flex-col items-center justify-center text-center px-2 py-2 my-auto min-h-0">
+							<h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-ink leading-tight max-w-lg break-words tracking-tight select-all">
 								{card.front}
 							</h2>
-							<p className="text-xs text-muted mt-3 font-medium hidden md:block">
-								Tekan <span className="kbd-hint">Spasi</span> untuk melihat arti
-							</p>
 						</div>
 
+						{/* Tombol Aksi Bawah */}
 						{!isFlipped && (
-							<div className="pt-4">
+							<div className="pt-1.5 shrink-0">
 								<button
 									type="button"
-									onClick={handleFlip}
-									className="w-full py-4 bg-primary text-white text-base font-bold rounded-control hover:bg-primary-hover active:scale-[0.98] transition-all tactile-btn inline-flex items-center justify-center gap-2 shadow"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleFlip();
+									}}
+									className="w-full py-3 sm:py-3.5 px-4 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary-hover hover:to-indigo-700 text-white text-sm sm:text-base font-extrabold rounded-control active:scale-[0.98] transition-all tactile-btn flex items-center justify-between shadow-md shadow-primary/25 group"
 								>
-									Lihat artinya
-									<Icon name="arrow-right" className="w-5 h-5" />
+									<span className="flex items-center gap-2">
+										<Icon name="sparkles" className="w-4 h-4 text-white/90" />
+										<span>Lihat Artinya</span>
+									</span>
+									<span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-md text-white/95 backdrop-blur-xs group-hover:translate-x-0.5 transition-transform">
+										<span>Spasi ␣</span>
+										<Icon name="arrow-right" className="w-3.5 h-3.5" />
+									</span>
 								</button>
 							</div>
 						)}
 					</div>
 
-					{/* Belakang — terjemahan & contoh */}
+					{/* ======================================================== */}
+					{/* SISI BELAKANG (Arti, POS, Contoh & Tombol Ulasan FSRS)    */}
+					{/* ======================================================== */}
 					{isFlipped && (
-						<div className="flip-card-back absolute inset-0 flex flex-col p-6 md:p-8">
-							<div className="pb-3 border-b border-edge flex items-center justify-between">
+						<div className="flip-card-back absolute inset-0 flex flex-col justify-between p-4 sm:p-5 md:p-6 bg-surface overflow-hidden">
+							{/* Header Bar */}
+							<div className="pb-2 sm:pb-2.5 border-b border-edge/70 flex items-center justify-between gap-3 shrink-0">
 								<div className="flex items-center gap-2 min-w-0">
 									<span
-										className={`inline-block font-mono text-[11px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-[8px] ${bandMeta.colorClass}`}
+										className={`inline-block font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-[6px] ${bandMeta.colorClass}`}
 									>
 										{bandMeta.title}
 									</span>
-									{parsed.pos && (
-										<span className="font-mono text-[11px] font-bold italic px-2 py-0.5 rounded-[6px] bg-surface-2 text-muted">
-											{parsed.pos}
-										</span>
-									)}
+									<span className="font-mono text-xs font-bold text-muted truncate bg-surface-2 px-2 py-0.5 rounded-md border border-edge/50">
+										{card.front}
+									</span>
 								</div>
+
 								<button
 									type="button"
-									onClick={() => void speak(parsed.gloss, "id-ID")}
+									onClick={() => void speak(parsed.gloss || card.back, "id-ID")}
 									aria-label="Dengarkan terjemahan"
-									className="w-10 h-10 inline-flex items-center justify-center rounded-full bg-surface-2 text-muted hover:text-primary active:scale-95 transition-transform shrink-0"
+									title="Dengarkan terjemahan (Tekan S)"
+									className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shrink-0 shadow-2xs"
 								>
-									<Icon name="volume" className="w-5 h-5" />
+									<Icon name="volume" className="w-4 h-4" />
 								</button>
 							</div>
 
-							<div className="flex-1 flex flex-col justify-center py-3 overflow-y-auto overscroll-contain text-center">
-								<p className="text-xs font-mono font-bold uppercase tracking-widest text-muted mb-1">
+							{/* Area Tengah: Terjemahan, Kelas Kata & Contoh */}
+							<div className="flex-1 flex flex-col justify-center py-2 overflow-y-auto scrollbar-none text-center my-auto min-h-0">
+								<p className="text-[11px] font-mono font-bold uppercase tracking-widest text-muted/70 mb-1.5 shrink-0">
 									{card.front}
 								</p>
-								<p className="text-2xl md:text-3xl font-extrabold text-ink leading-snug break-words">
-									{parsed.gloss}
-								</p>
 
-								{/* Contoh kalimat jika ada */}
+								{/* Daftar arti kata dengan label POS */}
+								<div className="flex flex-col items-center justify-center gap-1.5 max-w-lg mx-auto w-full px-1">
+									{parsed.items.map((item) => (
+										<div
+											key={`${item.pos ?? "def"}:${item.text}`}
+											className="flex flex-wrap items-center justify-center gap-2 py-0.5"
+										>
+											{item.pos && (
+												<span
+													title={item.posFull}
+													className={`font-mono text-[9.5px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 rounded-[6px] border ${
+														item.tone ??
+														"bg-surface-2 text-muted border-edge/60"
+													} shrink-0 select-none shadow-2xs`}
+												>
+													{item.posLabel ?? item.pos}
+												</span>
+											)}
+											<span className="text-lg sm:text-2xl md:text-3xl font-black text-ink leading-tight tracking-tight">
+												{item.text}
+											</span>
+										</div>
+									))}
+								</div>
+
+								{/* Contoh Kalimat (Editorial Quote Block) */}
 								{parsed.exampleEn && (
-									<div className="mt-4 p-3 rounded-control bg-surface-2/60 border border-edge/60 text-left">
-										<p className="text-[13px] font-semibold text-ink leading-relaxed">
+									<div className="mt-2.5 p-2.5 sm:p-3 rounded-r-xl rounded-l-xs bg-surface-2/60 border-l-[3px] border-primary text-left space-y-0.5 shadow-2xs">
+										<p className="text-xs sm:text-[12.5px] font-semibold text-ink leading-relaxed">
 											"{parsed.exampleEn}"
 										</p>
 										{parsed.exampleId && (
-											<p className="text-[12px] text-muted mt-0.5">
+											<p className="text-[10.5px] sm:text-[11.5px] text-muted leading-snug">
 												{parsed.exampleId}
 											</p>
 										)}
@@ -315,14 +397,15 @@ export function EkspedisiCard({
 								)}
 							</div>
 
-							<div className="pt-2 grid grid-cols-4 gap-2">
+							{/* 4 Tombol Ulasan Ergonomis FSRS */}
+							<div className="pt-2 grid grid-cols-4 gap-1.5 sm:gap-2 shrink-0">
 								{ratingButtons.map((b) => (
 									<button
 										type="button"
 										key={b.label}
 										onClick={() => void handleReview(b.rating)}
 										disabled={isSubmitting}
-										className="relative flex flex-col items-center justify-center gap-0.5 py-3 px-1 border rounded-control transition-all disabled:opacity-50 active:scale-[0.97] tactile-btn"
+										className="relative flex flex-col items-center justify-center gap-0.5 py-2 sm:py-2.5 px-1 border rounded-control transition-all disabled:opacity-50 active:scale-[0.96] tactile-btn shadow-xs hover-lift cursor-pointer"
 										style={{
 											backgroundColor: b.bg,
 											borderColor: b.border,
@@ -338,9 +421,11 @@ export function EkspedisiCard({
 										<span className="hidden md:inline-block absolute top-1 right-1 text-[9px] font-mono font-bold opacity-60">
 											{b.keyHint}
 										</span>
-										<span className="text-sm font-extrabold">{b.label}</span>
+										<span className="text-xs sm:text-sm font-extrabold truncate w-full text-center">
+											{b.label}
+										</span>
 										<span
-											className="font-mono text-[10px] font-semibold"
+											className="font-mono text-[9px] sm:text-[10px] font-bold opacity-90 truncate w-full text-center"
 											style={{ color: b.text }}
 										>
 											{formatInterval(

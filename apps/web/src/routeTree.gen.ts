@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as KelolaRouteImport } from './routes/kelola'
+import { Route as KomunitasRouteImport } from './routes/komunitas'
 import { Route as LatihanRouteImport } from './routes/latihan'
 import { Route as PengaturanRouteImport } from './routes/pengaturan'
 import { Route as StatistikRouteImport } from './routes/statistik'
@@ -17,6 +19,16 @@ import { Route as StatistikRouteImport } from './routes/statistik'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KelolaRoute = KelolaRouteImport.update({
+  id: '/kelola',
+  path: '/kelola',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KomunitasRoute = KomunitasRouteImport.update({
+  id: '/komunitas',
+  path: '/komunitas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LatihanRoute = LatihanRouteImport.update({
@@ -37,12 +49,16 @@ const StatistikRoute = StatistikRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/kelola': typeof KelolaRoute
+  '/komunitas': typeof KomunitasRoute
   '/latihan': typeof LatihanRoute
   '/pengaturan': typeof PengaturanRoute
   '/statistik': typeof StatistikRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/kelola': typeof KelolaRoute
+  '/komunitas': typeof KomunitasRoute
   '/latihan': typeof LatihanRoute
   '/pengaturan': typeof PengaturanRoute
   '/statistik': typeof StatistikRoute
@@ -50,20 +66,32 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/kelola': typeof KelolaRoute
+  '/komunitas': typeof KomunitasRoute
   '/latihan': typeof LatihanRoute
   '/pengaturan': typeof PengaturanRoute
   '/statistik': typeof StatistikRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/latihan' | '/pengaturan' | '/statistik'
+  fullPaths:
+    '/' | '/kelola' | '/komunitas' | '/latihan' | '/pengaturan' | '/statistik'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/latihan' | '/pengaturan' | '/statistik'
-  id: '__root__' | '/' | '/latihan' | '/pengaturan' | '/statistik'
+  to: '/' | '/kelola' | '/komunitas' | '/latihan' | '/pengaturan' | '/statistik'
+  id:
+    | '__root__'
+    | '/'
+    | '/kelola'
+    | '/komunitas'
+    | '/latihan'
+    | '/pengaturan'
+    | '/statistik'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  KelolaRoute: typeof KelolaRoute
+  KomunitasRoute: typeof KomunitasRoute
   LatihanRoute: typeof LatihanRoute
   PengaturanRoute: typeof PengaturanRoute
   StatistikRoute: typeof StatistikRoute
@@ -76,6 +104,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kelola': {
+      id: '/kelola'
+      path: '/kelola'
+      fullPath: '/kelola'
+      preLoaderRoute: typeof KelolaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/komunitas': {
+      id: '/komunitas'
+      path: '/komunitas'
+      fullPath: '/komunitas'
+      preLoaderRoute: typeof KomunitasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/latihan': {
@@ -104,6 +146,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  KelolaRoute: KelolaRoute,
+  KomunitasRoute: KomunitasRoute,
   LatihanRoute: LatihanRoute,
   PengaturanRoute: PengaturanRoute,
   StatistikRoute: StatistikRoute,

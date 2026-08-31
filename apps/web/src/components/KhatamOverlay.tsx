@@ -5,8 +5,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
 	buildKhatamQuiz,
+	getBandMeta,
 	KHATAM_PASS_SCORE,
 	KHATAM_QUESTION_COUNT,
 	type KhatamQuestion,
@@ -34,7 +36,13 @@ export function KhatamOverlay({
 	const [selectedOpt, setSelectedOpt] = useState<string | null>(null);
 	const [phase, setPhase] = useState<Phase>("quiz");
 	const [seedNonce, setSeedNonce] = useState(0);
+	const [mounted, setMounted] = useState(false);
 	const unlockedRef = useRef(false);
+	const meta = getBandMeta(category);
+
+	useEffect(() => {
+		setMounted(true);
+	}, []);
 
 	// Shortcut keyboard: Escape untuk menutup
 	useEffect(() => {
@@ -84,7 +92,7 @@ export function KhatamOverlay({
 	}, [phase, category]);
 
 	const answer = (option: string) => {
-		if (selectedOpt !== null) return;
+		if (selectedOpt !== null || !quiz) return;
 		setSelectedOpt(option);
 		window.setTimeout(() => {
 			const next = [...answers, option];
@@ -111,17 +119,23 @@ export function KhatamOverlay({
 	const passed = Boolean(quiz && quiz.length > 0 && score >= passScore);
 	const current = quiz ? quiz[cursor] : undefined;
 
-	return (
-		<div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur flex items-center justify-center p-6 pb-[env(safe-area-inset-bottom)]">
+	if (!mounted || typeof document === "undefined") {
+		return null;
+	}
+
+	return createPortal(
+		<div className="fixed inset-0 z-[200] bg-background/80 backdrop-blur-md flex items-center justify-center p-4 md:p-6 pb-[env(safe-area-inset-bottom)] animate-fade-in-up">
 			{phase === "quiz" ? (
-				<div className="max-w-md w-full mx-auto">
+				<div className="max-w-md w-full mx-auto space-y-4">
 					{/* Header */}
-					<div className="flex items-center justify-between mb-4">
+					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-2">
-							<span className="font-mono text-[11px] font-bold uppercase px-2 py-1 rounded-[8px] bg-primary/10 text-primary">
-								{category}
+							<span
+								className={`font-mono text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-[6px] ${meta.colorClass}`}
+							>
+								{meta.title}
 							</span>
-							<span className="font-mono text-[11px] font-bold uppercase text-muted">
+							<span className="font-mono text-[11px] font-bold uppercase text-muted tracking-wider">
 								Uji Naik Tahap
 							</span>
 						</div>
@@ -129,21 +143,21 @@ export function KhatamOverlay({
 							type="button"
 							onClick={onClose}
 							aria-label="Tutup"
-							className="w-9 h-9 flex items-center justify-center rounded-full bg-surface border border-edge text-muted hover:bg-surface-2 active:scale-95 transition"
+							className="w-8 h-8 flex items-center justify-center rounded-full bg-surface border border-edge text-muted hover:text-ink hover:bg-surface-2 active:scale-95 transition shadow-2xs"
 						>
 							<Icon name="x" className="w-4 h-4" />
 						</button>
 					</div>
 
 					{quiz === null ? (
-						<div className="rounded-card border border-edge bg-surface shadow-2xl p-6">
-							<div className="skeleton h-8 w-3/4 mx-auto mb-6" />
-							<div className="skeleton h-12 w-full mb-3" />
-							<div className="skeleton h-12 w-full mb-3" />
+						<div className="rounded-card border border-edge bg-surface shadow-card p-6 space-y-4">
+							<div className="skeleton h-8 w-3/4 mx-auto" />
+							<div className="skeleton h-12 w-full" />
+							<div className="skeleton h-12 w-full" />
 							<div className="skeleton h-12 w-full" />
 						</div>
 					) : quiz.length === 0 ? (
-						<div className="rounded-card border border-edge bg-surface shadow-2xl p-6 text-center">
+						<div className="rounded-card border border-edge bg-surface shadow-card p-6 text-center">
 							<p className="text-base font-bold text-ink mb-2">
 								Belum ada kata pada tahap ini
 							</p>
@@ -160,37 +174,42 @@ export function KhatamOverlay({
 						</div>
 					) : current ? (
 						<>
-							<div className="flex items-center justify-center gap-2 mb-6">
+							<div className="flex items-center justify-center gap-2 mb-4">
 								{DOT_KEYS.map((k, i) => (
 									<span
 										key={k}
-										className={`w-2.5 h-2.5 rounded-full transition-colors ${
+										className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
 											i < answers.length
-												? "bg-primary"
+												? "bg-primary scale-110"
 												: i === cursor
-													? "ring-2 ring-primary bg-surface"
-													: "bg-edge"
+													? "ring-2 ring-primary ring-offset-2 ring-offset-background bg-primary"
+													: "bg-surface-2 border border-edge"
 										}`}
 									/>
 								))}
 							</div>
 
 							{/* Kartu soal */}
-							<div className="rounded-card border border-edge bg-surface shadow-2xl p-6">
-								<p className="text-2xl md:text-3xl font-extrabold text-ink text-center break-words mb-6">
-									{current.front}
-								</p>
-								<div className="space-y-3">
+							<div className="rounded-card border border-edge bg-surface shadow-card p-6 md:p-8 space-y-6">
+								<div className="text-center space-y-1">
+									<span className="text-xs font-mono font-bold uppercase tracking-wider text-muted">
+										Soal {cursor + 1} dari {quiz.length}
+									</span>
+									<p className="text-3xl md:text-4xl font-black text-ink break-words tracking-tight">
+										{current.front}
+									</p>
+								</div>
+								<div className="space-y-2.5">
 									{current.options.map((opt) => (
 										<button
 											key={opt}
 											type="button"
 											disabled={selectedOpt !== null}
 											onClick={() => answer(opt)}
-											className={`w-full text-left px-4 py-3 rounded-control border bg-surface text-sm text-ink hover:bg-surface-2 active:scale-[0.98] transition ${
+											className={`w-full text-left px-4 py-3.5 rounded-control border text-sm font-semibold transition-all active:scale-[0.98] ${
 												selectedOpt === opt
-													? "border-primary bg-primary/15 font-semibold text-primary"
-													: "border-edge"
+													? "border-primary bg-primary/15 font-bold text-primary shadow-xs"
+													: "border-edge bg-surface text-ink hover:bg-surface-2 hover:border-primary/40"
 											}`}
 										>
 											{opt}
@@ -202,51 +221,59 @@ export function KhatamOverlay({
 					) : null}
 				</div>
 			) : (
-				<div className="max-w-sm w-full mx-auto rounded-card border border-edge bg-surface shadow-2xl p-6 text-center">
+				<div className="max-w-sm w-full mx-auto rounded-card border border-edge bg-surface shadow-card p-6 text-center space-y-4">
 					{passed ? (
 						<>
-							<div className="flex justify-center mb-4">
-								<Icon name="trophy" className="w-14 h-14 text-success" />
+							<div className="w-16 h-16 rounded-2xl bg-success/15 text-success flex items-center justify-center mx-auto shadow-md shadow-success/20">
+								<Icon name="trophy" className="w-8 h-8" />
 							</div>
-							<h2 className="text-xl font-extrabold text-ink tracking-tight">
-								Khatam! {category} terbuka
-							</h2>
-							<p className="font-mono text-[12px] font-bold text-muted mt-3">
-								{score}/{quiz.length || KHATAM_QUESTION_COUNT}
-							</p>
-							<p className="text-sm text-muted mt-2">Tahap terbuka permanen</p>
+							<div>
+								<h2 className="text-2xl font-black text-ink tracking-tight">
+									Selamat! Tahap Terbuka!
+								</h2>
+								<p className="text-sm text-muted mt-1 font-medium">
+									Tahap <strong className="text-ink">{meta.title}</strong>{" "}
+									berhasil dibuka permanen.
+								</p>
+								<p className="font-mono text-xs font-bold text-success mt-2 bg-success/10 py-1 px-3 rounded-pill inline-block">
+									Skor: {score}/{quiz?.length || KHATAM_QUESTION_COUNT} Benar
+								</p>
+							</div>
 							<button
 								type="button"
 								onClick={onClose}
-								className="mt-6 w-full py-3 px-6 bg-primary text-white font-bold rounded-control active:scale-95 transition"
+								className="w-full py-3.5 px-6 bg-primary text-white font-bold rounded-control hover:bg-primary-hover active:scale-95 transition shadow"
 							>
-								Lanjut ke Beranda
+								Lanjut Belajar
 							</button>
 						</>
 					) : (
 						<>
-							<div className="flex justify-center mb-4">
-								<Icon name="lock" className="w-14 h-14 text-muted" />
+							<div className="w-16 h-16 rounded-2xl bg-danger/10 text-danger flex items-center justify-center mx-auto">
+								<Icon name="lock" className="w-8 h-8" />
 							</div>
-							<h2 className="text-xl font-extrabold text-ink tracking-tight">
-								Belum lulus ({score}/{quiz.length || KHATAM_QUESTION_COUNT})
-							</h2>
-							<p className="text-sm text-muted mt-2">
-								Butuh minimal {passScore} benar. Review tahap sebelumnya atau
-								coba lagi.
-							</p>
-							<div className="flex gap-3 mt-6">
+							<div>
+								<h2 className="text-xl font-black text-ink tracking-tight">
+									Belum Lulus Kuis
+								</h2>
+								<p className="text-xs text-muted mt-1 font-medium">
+									Kamu menjawab benar {score} dari{" "}
+									{quiz?.length || KHATAM_QUESTION_COUNT} soal (butuh minimal{" "}
+									{passScore}).
+								</p>
+							</div>
+							<div className="flex gap-2.5 pt-2">
 								<button
 									type="button"
 									onClick={retry}
-									className="flex-1 py-3 bg-primary text-white font-bold rounded-control active:scale-95 transition"
+									className="flex-1 py-3 bg-primary text-white font-bold rounded-control hover:bg-primary-hover active:scale-95 transition shadow-sm text-sm"
 								>
-									Coba lagi
+									Coba Lagi
 								</button>
 								<button
 									type="button"
 									onClick={onClose}
-									className="flex-1 py-3 border border-edge bg-surface text-muted font-bold rounded-control active:scale-95 transition"
+									className="flex-1 py-3 border border-edge bg-surface text-ink font-bold rounded-control hover:bg-surface-2 active:scale-95 transition text-sm"
 								>
 									Tutup
 								</button>
@@ -255,6 +282,7 @@ export function KhatamOverlay({
 					)}
 				</div>
 			)}
-		</div>
+		</div>,
+		document.body,
 	);
 }

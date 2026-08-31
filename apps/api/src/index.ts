@@ -21,7 +21,7 @@ import {
   fsrsEngine,
   type FSRSCard,
 } from "@flashcard/shared";
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 
 // ---------------------------------------------------------------------------
 // Environment bindings
@@ -30,7 +30,9 @@ import type { D1Database } from "@cloudflare/workers-types";
 type Bindings = {
   DB: D1Database;
   flashcard_db: D1Database;
+  BACKUP_BUCKET?: R2Bucket;
   MCP_TOKEN?: string;
+  ADMIN_KEY?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -65,11 +67,450 @@ function deckVersionFromRows(
   return `fnv1a-${hash.toString(16).padStart(8, "0")}`;
 }
 
+// ---------------------------------------------------------------------------
+// COMMUNITY CHAT STATE & WEBSOCKET BROADCAST
+// ---------------------------------------------------------------------------
+
+export interface CommunityMessageDto {
+  id: string;
+  username: string;
+  deviceId: string;
+  content: string;
+  flashcardRef?: {
+    front: string;
+    back: string;
+    category: string;
+  };
+  timestamp: number;
+}
+
+const recentMessages: CommunityMessageDto[] = [
+  {
+    id: "welcome-msg-1",
+    username: "KataBot",
+    deviceId: "system-bot",
+    content: "Selamat datang di Komunitas Belajar Kata! 👋 Ruang belajar bersama, berbagi kosakata, dan ngobrol live antar pembelajar.",
+    timestamp: Date.now() - 600000,
+  },
+];
+
+const connectedSockets = new Set<WebSocket>();
+
+function broadcastCommunity(data: Record<string, unknown>) {
+  const payload = JSON.stringify(data);
+  for (const ws of connectedSockets) {
+    try {
+      ws.send(payload);
+    } catch {
+      connectedSockets.delete(ws);
+    }
+  }
+}
+
+type CloudflareWebSocket = WebSocket & { accept: () => void };
+
+interface WebSocketPairConstructor {
+  new (): { 0: CloudflareWebSocket; 1: CloudflareWebSocket };
+}
+
+const WSPair = (globalThis as unknown as { WebSocketPair?: WebSocketPairConstructor }).WebSocketPair;
+
+// WebSocket endpoint untuk Real-time Multi-User Chat
+app.get("/ws/community", async (c) => {
+  const upgradeHeader = c.req.header("Upgrade") || c.req.header("upgrade");
+  if (!upgradeHeader || upgradeHeader.toLowerCase() !== "websocket") {
+    return c.text("Expected Upgrade: websocket", 426);
+  }
+
+  if (!WSPair) {
+    return c.text("WebSocket not available in this environment", 501);
+  }
+
+  const pair = new WSPair();
+  const client = pair[0];
+  const server = pair[1];
+
+  server.accept();
+  connectedSockets.add(server);
+
+  // Kirim histori pesan dan info jumlah online ke client yang baru terhubung
+  try {
+    server.send(
+      JSON.stringify({
+        type: "history",
+        messages: recentMessages.slice(-50),
+        onlineCount: connectedSockets.size,
+      })
+    );
+  } catch {
+    // ignore
+  }
+
+  broadcastCommunity({
+    type: "presence",
+    onlineCount: connectedSockets.size,
+  });
+
+  server.addEventListener("message", (event) => {
+    try {
+      const dataStr = typeof event.data === "string" ? event.data : new TextDecoder().decode(event.data as ArrayBuffer);
+      const data = JSON.parse(dataStr);
+      if (data.type === "chat" && typeof data.content === "string") {
+        const cleanContent = data.content.trim().slice(0, 500);
+        if (!cleanContent) return;
+
+        const newMsg: CommunityMessageDto = {
+          id: String(data.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+          username: String(data.username || "Pembelajar").slice(0, 24),
+          deviceId: String(data.deviceId || "unknown").slice(0, 64),
+          content: cleanContent,
+          flashcardRef: data.flashcardRef,
+          timestamp: typeof data.timestamp === "number" ? data.timestamp : Date.now(),
+        };
+
+        if (!recentMessages.some((m) => m.id === newMsg.id)) {
+          recentMessages.push(newMsg);
+          if (recentMessages.length > 200) {
+            recentMessages.shift();
+          }
+        }
+
+        broadcastCommunity({
+          type: "new_message",
+          message: newMsg,
+        });
+      }
+    } catch {
+      // ignore malformed message
+    }
+  });
+
+  const handleClose = () => {
+    connectedSockets.delete(server);
+    broadcastCommunity({
+      type: "presence",
+      onlineCount: connectedSockets.size,
+    });
+  };
+
+  server.addEventListener("close", handleClose);
+  server.addEventListener("error", handleClose);
+
+  return new Response(null, {
+    status: 101,
+    webSocket: client,
+  } as ResponseInit & { webSocket: CloudflareWebSocket });
+});
+
+let communityTablesInit = false;
+async function initCommunityD1(d1: D1Database): Promise<void> {
+  if (communityTablesInit) return;
+  try {
+    await d1.batch([
+      d1.prepare(`
+        CREATE TABLE IF NOT EXISTS community_messages (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          content TEXT NOT NULL,
+          flashcard_ref TEXT,
+          created_at INTEGER NOT NULL
+        )
+      `),
+      d1.prepare(`
+        CREATE TABLE IF NOT EXISTS community_presence (
+          device_id TEXT PRIMARY KEY,
+          username TEXT NOT NULL,
+          activity TEXT NOT NULL DEFAULT 'Online',
+          last_seen INTEGER NOT NULL
+        )
+      `),
+      d1.prepare(`
+        CREATE TABLE IF NOT EXISTS user_handles (
+          handle TEXT PRIMARY KEY,
+          device_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      `),
+      d1.prepare(`
+        CREATE TABLE IF NOT EXISTS user_cloud_backups (
+          handle TEXT PRIMARY KEY,
+          device_id TEXT NOT NULL,
+          backup_data TEXT NOT NULL,
+          cards_count INTEGER NOT NULL DEFAULT 0,
+          streak_count INTEGER NOT NULL DEFAULT 0,
+          xp_count INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        )
+      `),
+      d1.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_comm_created ON community_messages(created_at DESC)
+      `),
+      d1.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_presence_last_seen ON community_presence(last_seen DESC)
+      `),
+    ]);
+
+    // Migrasi ringan jika kolom activity belum ada di database D1 existing
+    try {
+      await d1.prepare(`ALTER TABLE community_presence ADD COLUMN activity TEXT NOT NULL DEFAULT 'Online'`).run();
+    } catch {
+      // safe ignore jika kolom sudah ada
+    }
+
+    communityTablesInit = true;
+  } catch (e) {
+    console.warn("D1 init table error:", e);
+  }
+}
+
+function normalizeUserHandle(input: string): string {
+  let clean = String(input || "").trim().toLowerCase();
+  if (!clean.startsWith("kata-")) {
+    clean = `kata-${clean}`;
+  }
+  clean = clean.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-");
+  return clean.slice(0, 30);
+}
+
+const RESERVED_HANDLES = new Set([
+  "kata-admin",
+  "kata-administrator",
+  "kata-operator",
+  "kata-op",
+  "kata-mod",
+  "kata-moderator",
+  "kata-staff",
+  "kata-system",
+  "kata-support",
+  "kata-official",
+  "kata-katabot",
+  "kata-bot",
+  "kata-root",
+  "kata-superuser",
+  "kata-ai",
+  "kata-tutor",
+  "kata-help",
+  "kata-developer",
+  "kata-owner",
+  "kata-founder",
+  "kata-security",
+]);
+
+function isReservedHandle(handle: string): boolean {
+  const norm = handle.toLowerCase().trim();
+  if (RESERVED_HANDLES.has(norm)) return true;
+  const raw = norm.replace(/^kata-/, "");
+  const reservedWords = [
+    "admin",
+    "administrator",
+    "operator",
+    "moderator",
+    "staff",
+    "system",
+    "support",
+    "official",
+    "katabot",
+    "superuser",
+    "root",
+    "security",
+  ];
+  return reservedWords.some(
+    (word) => raw === word || raw.startsWith(`${word}-`) || raw.endsWith(`-${word}`)
+  );
+}
+
+function verifyAdminKey(providedKey?: string, envKey?: string): boolean {
+  if (!providedKey) return false;
+  const targetKey = envKey || "kata-admin-secret";
+  return providedKey.trim() === targetKey.trim();
+}
+
+export interface ActiveLearnerDto {
+  username: string;
+  activity: string;
+  lastSeen: number;
+}
+
+// In-Memory cache for deck version to prevent reading 2,500 rows on every sync check
+let cachedDeckVersionData: { version: string; count: number; expiresAt: number } | null = null;
+
+export function invalidateDeckVersionCache() {
+  cachedDeckVersionData = null;
+}
+
 const routes = app
   .get("/api/hello", async (c) => {
     return c.json({ message: "Hello from Cloudflare D1!" });
   })
+  .get("/api/community/messages", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const since = Number(c.req.query("since") || "0");
+    const now = Date.now();
+    const activeCutoff = now - 60_000;
+
+    // Jika ada param 'since', hanya ambil pesan baru (hemat row read D1)
+    const query =
+      since > 0
+        ? d1
+            .prepare(
+              `SELECT id, username, device_id as deviceId, content, flashcard_ref as flashcardRef, created_at as timestamp
+               FROM community_messages
+               WHERE created_at > ?
+               ORDER BY created_at ASC
+               LIMIT 40`
+            )
+            .bind(since)
+        : d1.prepare(
+            `SELECT id, username, device_id as deviceId, content, flashcard_ref as flashcardRef, created_at as timestamp
+             FROM community_messages
+             ORDER BY created_at DESC
+             LIMIT 30`
+          );
+
+    const [rows, presenceRes] = await Promise.all([
+      query.all<{
+        id: string;
+        username: string;
+        deviceId: string;
+        content: string;
+        flashcardRef: string | null;
+        timestamp: number;
+      }>(),
+      d1
+        .prepare(
+          `SELECT count(device_id) as count
+           FROM community_presence
+           WHERE last_seen > ?`
+        )
+        .bind(activeCutoff)
+        .first<{ count: number }>(),
+    ]);
+
+    const resultsList =
+      since > 0 ? rows.results || [] : (rows.results || []).reverse();
+    const formatted: CommunityMessageDto[] = resultsList.map((r) => ({
+      id: r.id,
+      username: r.username,
+      deviceId: r.deviceId,
+      content: r.content,
+      flashcardRef: r.flashcardRef ? JSON.parse(r.flashcardRef) : undefined,
+      timestamp: r.timestamp,
+    }));
+
+    return c.json({
+      messages: formatted,
+      onlineCount: Math.max(1, presenceRes?.count ?? 1),
+    });
+  })
+  .post("/api/community/messages", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const cleanContent = String(body.content || "").trim().slice(0, 500);
+    if (!cleanContent) {
+      return c.json({ error: "Pesan tidak boleh kosong" }, 400);
+    }
+
+    const now = Date.now();
+    const newMsg: CommunityMessageDto = {
+      id: String(body.id || `msg-${now}-${Math.random().toString(36).slice(2, 8)}`),
+      username: String(body.username || "Pembelajar").slice(0, 24),
+      deviceId: String(body.deviceId || "unknown").slice(0, 64),
+      content: cleanContent,
+      flashcardRef: body.flashcardRef as CommunityMessageDto["flashcardRef"],
+      timestamp: typeof body.timestamp === "number" ? body.timestamp : now,
+    };
+    const activity = String(body.activity || "Di Komunitas").slice(0, 50);
+
+    await d1.batch([
+      d1.prepare(`
+        INSERT OR REPLACE INTO community_messages (id, username, device_id, content, flashcard_ref, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        newMsg.id,
+        newMsg.username,
+        newMsg.deviceId,
+        newMsg.content,
+        newMsg.flashcardRef ? JSON.stringify(newMsg.flashcardRef) : null,
+        newMsg.timestamp,
+      ),
+      d1.prepare(`
+        INSERT OR REPLACE INTO community_presence (device_id, username, activity, last_seen)
+        VALUES (?, ?, ?, ?)
+      `).bind(newMsg.deviceId, newMsg.username, activity, now),
+      d1.prepare(`
+        DELETE FROM community_messages
+        WHERE created_at < ?
+      `).bind(now - 24 * 60 * 60 * 1000),
+    ]);
+
+    broadcastCommunity({
+      type: "new_message",
+      message: newMsg,
+    });
+
+    return c.json({ success: true, message: newMsg });
+  })
+  .post("/api/community/heartbeat", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const deviceId = String(body.deviceId || "").slice(0, 64);
+    const username = String(body.username || "Pembelajar").slice(0, 24);
+    const activity = String(body.activity || "Online").slice(0, 50);
+    if (!deviceId) {
+      return c.json({ success: false, onlineCount: 1, activeLearners: [] });
+    }
+
+    const now = Date.now();
+    const activeCutoff = now - 45_000;
+
+    // Simpan presence dan bersihkan record basi (> 60 detik)
+    await d1.batch([
+      d1.prepare(`
+        INSERT OR REPLACE INTO community_presence (device_id, username, activity, last_seen)
+        VALUES (?, ?, ?, ?)
+      `).bind(deviceId, username, activity, now),
+      d1.prepare(`
+        DELETE FROM community_presence
+        WHERE last_seen < ?
+      `).bind(now - 60_000),
+    ]);
+
+    const learnersRes = await d1.prepare(`
+      SELECT username, COALESCE(activity, 'Online') as activity, max(last_seen) as lastSeen
+      FROM community_presence
+      WHERE last_seen > ?
+      GROUP BY username
+      ORDER BY lastSeen DESC
+      LIMIT 50
+    `).bind(activeCutoff).all<{ username: string; activity: string; lastSeen: number }>();
+
+    const activeLearners = learnersRes.results || [];
+    const onlineCount = Math.max(1, activeLearners.length);
+
+    return c.json({
+      success: true,
+      onlineCount,
+      activeLearners,
+    });
+  })
   .get("/api/deck/version", async (c) => {
+    const now = Date.now();
+    if (cachedDeckVersionData && now < cachedDeckVersionData.expiresAt) {
+      c.header("Cache-Control", "public, max-age=300, s-maxage=1800");
+      return c.json({
+        version: cachedDeckVersionData.version,
+        count: cachedDeckVersionData.count,
+      });
+    }
+
     const db = drizzle(getD1(c));
     const rows = await db
       .select({
@@ -81,8 +522,17 @@ const routes = app
       .from(cards)
       .orderBy(asc(cards.id))
       .all();
+
+    const version = deckVersionFromRows(rows);
+    cachedDeckVersionData = {
+      version,
+      count: rows.length,
+      expiresAt: now + 300_000, // Cache di Worker memori selama 5 menit
+    };
+
+    c.header("Cache-Control", "public, max-age=300, s-maxage=1800");
     return c.json({
-      version: deckVersionFromRows(rows),
+      version,
       count: rows.length,
     });
   })
@@ -104,7 +554,345 @@ const routes = app
       .offset(offset)
       .all();
 
+    c.header("Cache-Control", "public, max-age=3600, s-maxage=86400");
     return c.json({ cards: rows, hasMore: rows.length === limit });
+  })
+  .get("/api/user/check-handle", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const rawHandle = c.req.query("handle") || "";
+    const deviceId = c.req.query("deviceId") || "";
+    const handle = normalizeUserHandle(rawHandle);
+
+    if (handle.length < 6 || !/^kata-[a-z0-9_-]{2,24}$/.test(handle)) {
+      return c.json({
+        available: false,
+        ownedByMe: false,
+        handle,
+        error: "ID harus berformat kata-<nama> (huruf, angka, strip, 3-24 karakter)",
+      });
+    }
+
+    if (isReservedHandle(handle)) {
+      const adminKey = c.req.query("adminKey") || "";
+      const isValid = verifyAdminKey(adminKey, c.env.ADMIN_KEY);
+      if (!isValid) {
+        return c.json({
+          available: false,
+          ownedByMe: false,
+          handle,
+          requiresAdminKey: true,
+          error: `ID "${handle}" dilindungi (khusus admin/operator). Masukkan Admin Secret Key untuk mengklaim.`,
+        });
+      }
+    }
+
+    const row = await d1
+      .prepare(`SELECT handle, device_id FROM user_handles WHERE handle = ?`)
+      .bind(handle)
+      .first<{ handle: string; device_id: string }>();
+
+    if (!row) {
+      return c.json({ available: true, ownedByMe: false, handle });
+    }
+
+    const ownedByMe = row.device_id === deviceId;
+    return c.json({
+      available: ownedByMe,
+      ownedByMe,
+      handle,
+      error: ownedByMe ? undefined : `ID ${handle} sudah dipakai pengguna lain`,
+    });
+  })
+  .post("/api/user/claim-handle", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const rawHandle = String(body.handle || "");
+    const deviceId = String(body.deviceId || "").slice(0, 64);
+    const adminKey = String(body.adminKey || "").trim();
+    const handle = normalizeUserHandle(rawHandle);
+
+    if (!deviceId) {
+      return c.json({ error: "Device ID wajib disertakan" }, 400);
+    }
+    if (handle.length < 6 || !/^kata-[a-z0-9_-]{2,24}$/.test(handle)) {
+      return c.json(
+        {
+          error:
+            "Format ID tidak valid. Gunakan format kata-<nama> (3-24 karakter alphanumeric)",
+        },
+        400
+      );
+    }
+
+    if (isReservedHandle(handle)) {
+      const isValid = verifyAdminKey(adminKey, c.env.ADMIN_KEY);
+      if (!isValid) {
+        return c.json(
+          {
+            error: `ID "${handle}" dilindungi. Masukkan Admin Secret Key yang benar.`,
+            requiresAdminKey: true,
+          },
+          403
+        );
+      }
+    }
+
+    const existing = await d1
+      .prepare(`SELECT handle, device_id FROM user_handles WHERE handle = ?`)
+      .bind(handle)
+      .first<{ handle: string; device_id: string }>();
+
+    const now = Date.now();
+    if (existing && existing.device_id !== deviceId && !verifyAdminKey(adminKey, c.env.ADMIN_KEY)) {
+      return c.json(
+        {
+          error: `ID ${handle} sudah dimiliki pengguna lain. Silakan pilih ID lain.`,
+        },
+        409
+      );
+    }
+
+    await d1.batch([
+      d1.prepare(`
+        INSERT OR REPLACE INTO user_handles (handle, device_id, created_at, updated_at)
+        VALUES (?, ?, COALESCE((SELECT created_at FROM user_handles WHERE handle = ?), ?), ?)
+      `).bind(handle, deviceId, handle, now, now),
+      d1.prepare(`
+        UPDATE community_presence
+        SET username = ?
+        WHERE device_id = ?
+      `).bind(handle, deviceId),
+    ]);
+
+    return c.json({ success: true, handle });
+  })
+  .delete("/api/community/messages/:id", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const adminKey = c.req.header("X-Admin-Key") || c.req.query("adminKey") || "";
+    if (!verifyAdminKey(adminKey, c.env.ADMIN_KEY)) {
+      return c.json({ error: "Unauthorized: Admin key diperlukan" }, 403);
+    }
+
+    const id = c.req.param("id");
+    await d1.prepare(`DELETE FROM community_messages WHERE id = ?`).bind(id).run();
+    return c.json({ success: true, deletedId: id });
+  })
+  .post("/api/backup/cloud", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const rawHandle = String(body.handle || "");
+    const deviceId = String(body.deviceId || "").slice(0, 64);
+    const backupData = body.backupData;
+    const stats = (body.stats || {}) as Record<string, number>;
+
+    const handle = normalizeUserHandle(rawHandle);
+    if (!handle || !backupData) {
+      return c.json({ error: "Data cadangan atau ID tidak valid" }, 400);
+    }
+
+    const now = Date.now();
+    const backupJson =
+      typeof backupData === "string" ? backupData : JSON.stringify(backupData);
+    const cardsCount = Number(stats.cardsCount ?? 0);
+    const streakCount = Number(stats.streakCount ?? 0);
+    const xpCount = Number(stats.xpCount ?? 0);
+
+    // 1. Simpan ke Cloudflare R2 jika bucket terkonfigurasi
+    let r2Saved = false;
+    if (c.env.BACKUP_BUCKET) {
+      try {
+        await c.env.BACKUP_BUCKET.put(`backups/${handle}.json`, backupJson, {
+          customMetadata: {
+            handle,
+            deviceId,
+            updatedAt: String(now),
+            cardsCount: String(cardsCount),
+          },
+        });
+        r2Saved = true;
+      } catch (e) {
+        console.warn("R2 backup put error, falling back to D1:", e);
+      }
+    }
+
+    // 2. Simpan juga ke D1 database (dengan penanganan error dan pencegahan statement overload)
+    try {
+      // Jika sudah tersimpan di R2, hindari memaksakan penulisan ratusan KB JSON utuh ke D1 SQL row
+      const d1BackupData = r2Saved ? "r2" : backupJson;
+      await d1
+        .prepare(
+          `INSERT OR REPLACE INTO user_cloud_backups (handle, device_id, backup_data, cards_count, streak_count, xp_count, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(handle, deviceId, d1BackupData, cardsCount, streakCount, xpCount, now)
+        .run();
+    } catch (e) {
+      console.warn("D1 backup metadata save error:", e);
+      // Jika R2 gagal DAN D1 juga gagal, baru kembalikan error
+      if (!r2Saved) {
+        return c.json(
+          { error: "Gagal menyimpan cadangan ke cloud maupun database D1" },
+          500
+        );
+      }
+    }
+
+    return c.json({
+      success: true,
+      handle,
+      backupAt: now,
+      cardsCount,
+      streakCount,
+      xpCount,
+      storage: r2Saved ? "r2" : "d1",
+    });
+  })
+  .get("/api/backup/cloud", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const rawHandle = c.req.query("handle") || "";
+    const handle = normalizeUserHandle(rawHandle);
+
+    if (!handle) {
+      return c.json({ error: "Handle tidak valid" }, 400);
+    }
+
+    // 1. Coba muat dari R2 terlebih dahulu jika ada
+    if (c.env.BACKUP_BUCKET) {
+      try {
+        const obj = await c.env.BACKUP_BUCKET.get(`backups/${handle}.json`);
+        if (obj) {
+          const text = await obj.text();
+          const parsed = JSON.parse(text);
+          return c.json({
+            success: true,
+            handle,
+            backupData: parsed,
+            backupAt: Number(obj.customMetadata?.updatedAt || Date.now()),
+            storage: "r2",
+          });
+        }
+      } catch (e) {
+        console.warn("R2 backup get error, fallback to D1:", e);
+      }
+    }
+
+    // 2. Muat dari D1 SQLite
+    const row = await d1
+      .prepare(
+        `SELECT backup_data, cards_count, streak_count, xp_count, updated_at
+         FROM user_cloud_backups
+         WHERE handle = ?`
+      )
+      .bind(handle)
+      .first<{
+        backup_data: string;
+        cards_count: number;
+        streak_count: number;
+        xp_count: number;
+        updated_at: number;
+      }>();
+
+    if (!row) {
+      return c.json(
+        {
+          error: `Cadangan untuk ID "${handle}" tidak ditemukan. Pastikan ID sudah benar atau telah dicadangkan sebelumnya.`,
+        },
+        404
+      );
+    }
+
+    if (row.backup_data === "r2") {
+      return c.json(
+        {
+          error: `File cadangan untuk ID "${handle}" tidak ditemukan di cloud storage.`,
+        },
+        404
+      );
+    }
+
+    let parsedData: unknown;
+    try {
+      parsedData = JSON.parse(row.backup_data);
+    } catch {
+      return c.json({ error: "Format cadangan rusak" }, 500);
+    }
+
+    return c.json({
+      success: true,
+      handle,
+      backupData: parsedData,
+      backupAt: row.updated_at,
+      stats: {
+        cardsCount: row.cards_count,
+        streakCount: row.streak_count,
+        xpCount: row.xp_count,
+      },
+      storage: "d1",
+    });
+  })
+  .get("/api/backup/cloud/status", async (c) => {
+    const d1 = getD1(c);
+    await initCommunityD1(d1);
+
+    const rawHandle = c.req.query("handle") || "";
+    const handle = normalizeUserHandle(rawHandle);
+
+    if (!handle) {
+      return c.json({ exists: false, error: "Handle tidak valid" }, 400);
+    }
+
+    // 1. Cek R2 terlebih dahulu jika bucket ada
+    if (c.env.BACKUP_BUCKET) {
+      try {
+        const head = await c.env.BACKUP_BUCKET.head(`backups/${handle}.json`);
+        if (head) {
+          const updatedAt = head.customMetadata?.updatedAt
+            ? Number(head.customMetadata.updatedAt)
+            : head.uploaded.getTime();
+          const cardsCount = head.customMetadata?.cardsCount
+            ? Number(head.customMetadata.cardsCount)
+            : 0;
+
+          return c.json({
+            exists: true,
+            handle,
+            backupAt: updatedAt,
+            cardsCount,
+            storage: "r2",
+          });
+        }
+      } catch (e) {
+        console.warn("R2 head error, fallback to D1 check:", e);
+      }
+    }
+
+    // 2. Cek D1
+    const row = await d1
+      .prepare(`SELECT updated_at, cards_count FROM user_cloud_backups WHERE handle = ?`)
+      .bind(handle)
+      .first<{ updated_at: number; cards_count: number }>();
+
+    if (row) {
+      return c.json({
+        exists: true,
+        handle,
+        backupAt: row.updated_at,
+        cardsCount: row.cards_count,
+        storage: "d1",
+      });
+    }
+
+    return c.json({ exists: false, handle });
   });
 
 // ===========================================================================

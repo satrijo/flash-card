@@ -9,6 +9,7 @@ import { db, type LocalCard } from "./db";
 import {
 	countTodayReviewsByCategory,
 	DEFAULT_DAILY_GOAL,
+	DEFAULT_HABITAT_QUOTA,
 	dayKey,
 	ensureGameStats,
 	getHabitatQuota,
@@ -63,9 +64,10 @@ async function getDeviceSeed(): Promise<string> {
 }
 
 /**
- * Bangun antrean ekspedisi hari ini.
- * Seed = tanggal + habitat + seed device → urutan sama sepanjang hari
- * DI DEVICE INI saja, ganti tiap hari, dan beda antar device/kategori.
+ * Bangun antrean ekspedisi hari ini dengan standar prioritas SRS Anki:
+ * 1. Learning & Relearning (State 1 & 3) yang jatuh tempo -> PRIORITAS TERTINGGI
+ * 2. Review Overdue (State 2) -> Diurutkan berdasarkan overdue tertua / stability terendah
+ * 3. Kartu Baru (State 0) -> Diacak deterministik harian dan mengisi sisa kuota harian
  */
 export async function buildEkspedisiQueue(
 	category: string | undefined,
@@ -85,16 +87,57 @@ export async function buildEkspedisiQueue(
 		return unlocked.has(cat);
 	});
 
+	// Kelompokkan kartu sesuai model memori Anki
+	const learningDue: LocalCard[] = [];
+	const reviewDue: LocalCard[] = [];
+	const newCardsDue: LocalCard[] = [];
+
+	for (const card of filtered) {
+		if (card.state === 1 || card.state === 3) {
+			// Sedang dalam siklus belajar / relearning
+			learningDue.push(card);
+		} else if (card.state === 2) {
+			// Review berkala (kartu yang sudah pernah dihafal)
+			reviewDue.push(card);
+		} else {
+			// Kartu baru (belum pernah diulas)
+			newCardsDue.push(card);
+		}
+	}
+
+	// 1. Learning cards diurutkan berdasarkan due time (yang paling dulu jatuh tempo)
+	learningDue.sort(
+		(a, b) => new Date(a.due).getTime() - new Date(b.due).getTime(),
+	);
+
+	// 2. Review cards diurutkan berdasarkan overdue tertua & stability terendah
+	reviewDue.sort((a, b) => {
+		const diffDue = new Date(a.due).getTime() - new Date(b.due).getTime();
+		if (diffDue !== 0) return diffDue;
+		return a.stability - b.stability;
+	});
+
+	// 3. New cards diacak secara deterministik harian
 	const deviceSeed = await getDeviceSeed();
 	const seed = `${dayKey(now)}::${category ?? "semua"}::${deviceSeed}`;
-	const shuffled = seededShuffle(filtered, makeRng(seed));
+	const shuffledNew = seededShuffle(newCardsDue, makeRng(seed));
 
-	// Batasi ke target harian: sisa kuota hari ini, atau satu putaran penuh
-	// sebagai sesi bonus jika target sudah tercapai.
+	// Gabungkan review cards terlebih dahulu (Reviews First, New Later)
+	const mustReview = [...learningDue, ...reviewDue];
+
+	// Batasi ke target harian / ukuran batch sesi yang terukur
 	const { quota, remaining } = await sessionCap(category, now);
-	if (quota <= 0) return shuffled; // kuota 0 = free-play, tanpa batas
-	const sessionSize = remaining > 0 ? remaining : quota;
-	return shuffled.slice(0, sessionSize);
+	const sessionSize =
+		quota > 0 ? (remaining > 0 ? remaining : quota) : DEFAULT_HABITAT_QUOTA;
+
+	if (mustReview.length >= sessionSize) {
+		// Batasi antrean sesi agar tidak membebani pengguna dengan ratusan kartu sekaligus
+		return mustReview.slice(0, sessionSize);
+	}
+
+	// Jika masih ada slot tersisa dalam sesi, isi dengan kartu baru
+	const neededNew = Math.max(0, sessionSize - mustReview.length);
+	return [...mustReview, ...shuffledNew.slice(0, neededNew)];
 }
 
 /**

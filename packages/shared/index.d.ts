@@ -1,3 +1,3 @@
-import { Rating, type Card as FSRSCard, createEmptyCard } from "ts-fsrs";
+import { Rating, State, type Card as FSRSCard, createEmptyCard } from "ts-fsrs";
 export declare const fsrsEngine: import("ts-fsrs").FSRS;
-export { Rating, type FSRSCard, createEmptyCard };
+export { Rating, State, type FSRSCard, createEmptyCard };

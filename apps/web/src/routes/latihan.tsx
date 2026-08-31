@@ -11,15 +11,17 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { EkspedisiCard } from "../components/EkspedisiCard";
 import { Icon, type IconName } from "../components/Icon";
+import { trackEvent } from "../lib/analytics";
 import {
 	bandIndex,
 	getBandMeta,
 	getUnlockedBands,
 	parseBackContent,
 } from "../lib/bands";
-import { db, type LocalCard } from "../lib/db";
+import { db, type LocalCard, type PracticeCardLog } from "../lib/db";
 import { ensureGameStats, levelFromXp } from "../lib/game";
-import { buildEkspedisiQueue, requeueAgain, sessionCap } from "../lib/session";
+import { savePracticeSession } from "../lib/history";
+import { buildEkspedisiQueue, requeueAgain } from "../lib/session";
 import { isTtsEnabled, setTtsEnabled, speak } from "../lib/tts";
 
 function validateSearch(search: Record<string, unknown>) {
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/latihan")({
 	component: LatihanPage,
 });
 
-export function LatihanPage() {
+function LatihanPage() {
 	const { tahap } = Route.useSearch();
 
 	const [queue, setQueue] = useState<LocalCard[]>([]);
@@ -45,10 +47,14 @@ export function LatihanPage() {
 	const [sessionCoins, setSessionCoins] = useState(0);
 	const [sessionCount, setSessionCount] = useState(0);
 	const [sessionNonce, setSessionNonce] = useState(0);
-	const [sessionCapped, setSessionCapped] = useState(false);
 	const [ttsEnabled, setTtsEnabledState] = useState(true);
 	const [loading, setLoading] = useState(true);
 	const [initialLevel, setInitialLevel] = useState<number | null>(null);
+	const [reviewedLogs, setReviewedLogs] = useState<PracticeCardLog[]>([]);
+	const [historySaved, setHistorySaved] = useState(false);
+	const [wordsListFilter, setWordsListFilter] = useState<
+		"all" | "again" | "success"
+	>("all");
 	const [ratingCounts, setRatingCounts] = useState({
 		again: 0,
 		hard: 0,
@@ -72,9 +78,10 @@ export function LatihanPage() {
 		setLoading(true);
 		setCursor(0);
 		setMissedCards([]);
+		setReviewedLogs([]);
+		setHistorySaved(false);
 		setSessionCoins(0);
 		setSessionCount(0);
-		setSessionCapped(false);
 		setRatingCounts({ again: 0, hard: 0, good: 0, easy: 0 });
 
 		void buildEkspedisiQueue(tahap).then((built) => {
@@ -83,15 +90,42 @@ export function LatihanPage() {
 			setLoading(false);
 		});
 
-		void sessionCap(tahap).then(({ quota, remaining }) => {
-			if (cancelled) return;
-			setSessionCapped(quota > 0 && remaining >= 0);
-		});
-
 		return () => {
 			cancelled = true;
 		};
 	}, [tahap, sessionNonce]);
+
+	useEffect(() => {
+		if (queue.length > 0 && cursor >= queue.length) {
+			trackEvent("session_completed", {
+				stage: tahap || "all",
+				words_count: sessionCount,
+				xp_gained: sessionCoins,
+			});
+
+			if (!historySaved && reviewedLogs.length > 0) {
+				setHistorySaved(true);
+				void savePracticeSession({
+					timestamp: Date.now(),
+					tahap,
+					wordsCount: new Set(reviewedLogs.map((c) => c.id)).size,
+					reviewCount: sessionCount,
+					xpGained: sessionCoins,
+					ratings: ratingCounts,
+					cards: reviewedLogs,
+				});
+			}
+		}
+	}, [
+		cursor,
+		queue.length,
+		tahap,
+		sessionCount,
+		sessionCoins,
+		historySaved,
+		reviewedLogs,
+		ratingCounts,
+	]);
 
 	const gameStats = useLiveQuery(() => db.gameStats.get("user"));
 	const unlocked = useLiveQuery(() => getUnlockedBands(), []);
@@ -178,15 +212,15 @@ export function LatihanPage() {
 			gameStats.todayCount >= gameStats.dailyGoal;
 
 		return (
-			<div className="py-8 animate-masked-reveal">
+			<div className="flex-1 overflow-y-auto scrollbar-none py-4 md:py-6 animate-masked-reveal max-w-xl mx-auto w-full">
 				<div className="text-center mb-6">
-					<div className="w-16 h-16 rounded-full bg-accent/15 text-accent-ink flex items-center justify-center mx-auto mb-4 animate-soft-pulse">
-						<Icon name="trophy" className="w-8 h-8" />
+					<div className="w-18 h-18 rounded-3xl bg-gradient-to-tr from-amber-400 via-amber-500 to-amber-600 text-amber-950 flex items-center justify-center mx-auto mb-4 animate-soft-pulse shadow-lg shadow-amber-500/30">
+						<Icon name="trophy" className="w-9 h-9 fill-amber-950" />
 					</div>
-					<h1 className="text-3xl font-extrabold text-ink mb-2 tracking-tight">
+					<h1 className="text-3xl font-black text-ink mb-2 tracking-tight">
 						Latihan Selesai!
 					</h1>
-					<p className="text-muted text-sm">
+					<p className="text-muted text-sm font-medium">
 						Kamu telah melatih{" "}
 						<strong className="text-ink">{uniqueLearned} kata</strong>
 						{sessionCount > uniqueLearned ? ` (${sessionCount} ulasan)` : ""}
@@ -194,7 +228,7 @@ export function LatihanPage() {
 					</p>
 
 					{didLevelUp && (
-						<div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-primary/15 text-primary font-bold text-sm animate-coin-pop">
+						<div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-gradient-to-r from-primary to-indigo-600 text-white font-bold text-sm animate-coin-pop shadow-md shadow-primary/25">
 							<Icon name="arrow-up" className="w-4 h-4" />
 							Selamat! Naik ke Level {level.level} ({level.rankName})
 						</div>
@@ -203,10 +237,10 @@ export function LatihanPage() {
 
 				{/* Perayaan Capaian Target Harian */}
 				{isGoalMet && (
-					<div className="mb-6 p-4 rounded-card bg-success/15 border border-success/30 flex items-center gap-3 text-success animate-fade-in-up">
+					<div className="mb-6 p-4.5 rounded-card bg-success/15 border border-success/30 flex items-center gap-3 text-success animate-fade-in-up shadow-xs">
 						<Icon name="sparkles" className="w-6 h-6 shrink-0" />
 						<div className="min-w-0">
-							<p className="font-extrabold text-sm text-ink">
+							<p className="font-black text-sm text-ink">
 								Target Harian Tercapai!
 							</p>
 							<p className="text-xs text-muted mt-0.5">
@@ -217,7 +251,7 @@ export function LatihanPage() {
 					</div>
 				)}
 
-				<div className="grid grid-cols-3 gap-3 mb-6">
+				<div className="grid grid-cols-3 gap-2.5 mb-6">
 					<SummaryTile
 						icon="star"
 						value={`+${sessionCoins}`}
@@ -230,7 +264,7 @@ export function LatihanPage() {
 						label="Rentetan"
 						tone="danger"
 					/>
-					<div className="rounded-card border border-edge bg-surface p-4 flex flex-col items-center justify-center gap-1 text-center shadow-sm">
+					<div className="rounded-card border border-success/25 bg-success/10 p-3.5 flex flex-col items-center justify-center gap-1 text-center shadow-xs">
 						<svg
 							width="56"
 							height="56"
@@ -270,7 +304,7 @@ export function LatihanPage() {
 									: ""}
 							</text>
 						</svg>
-						<p className="text-[11px] font-semibold text-muted">
+						<p className="text-[11px] font-semibold opacity-80 text-success truncate">
 							Target Hari Ini
 						</p>
 					</div>
@@ -331,15 +365,30 @@ export function LatihanPage() {
 														className="w-3.5 h-3.5 text-muted"
 													/>
 												</button>
-												{parsed.pos && (
-													<span className="font-mono text-[10px] font-bold italic px-1.5 py-0.5 rounded bg-surface text-muted">
-														{parsed.pos}
-													</span>
-												)}
 											</div>
-											<p className="text-xs text-muted mt-0.5 truncate">
-												{parsed.gloss}
-											</p>
+											<div className="flex flex-wrap items-center gap-1.5 mt-1">
+												{parsed.items.map((item) => (
+													<div
+														key={`${item.pos ?? "def"}:${item.text}`}
+														className="inline-flex items-center gap-1 text-xs"
+													>
+														{item.pos && (
+															<span
+																title={item.posFull}
+																className={`font-mono text-[9px] font-extrabold uppercase px-1 py-0.5 rounded border ${
+																	item.tone ??
+																	"bg-surface text-muted border-edge/60"
+																}`}
+															>
+																{item.posLabel ?? item.pos}
+															</span>
+														)}
+														<span className="text-xs text-ink/90 font-medium">
+															{item.text}
+														</span>
+													</div>
+												))}
+											</div>
 										</div>
 									</div>
 								);
@@ -362,23 +411,174 @@ export function LatihanPage() {
 					</div>
 				)}
 
-				<div className="flex items-center justify-center gap-3">
+				{/* Rincian Semua Kosakata yang Baru Saja Dihapal */}
+				{reviewedLogs.length > 0 && (
+					<div className="rounded-card bg-surface border border-edge p-4 sm:p-5 mb-6 shadow-sm space-y-3.5">
+						<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1 border-b border-edge/60">
+							<div>
+								<h3 className="font-mono text-[11px] font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
+									<Icon name="book" className="w-3.5 h-3.5 text-primary" />
+									<span>
+										Kosakata yang Dilatih ({reviewedLogs.length} kata)
+									</span>
+								</h3>
+								<p className="text-xs text-muted font-medium mt-0.5">
+									Daftar kata yang kamu ulas pada sesi ini
+								</p>
+							</div>
+
+							{/* Filter Chips */}
+							<div className="flex items-center gap-1 p-0.5 rounded-pill bg-surface-2 border border-edge/60 text-[11px] font-bold">
+								<button
+									type="button"
+									onClick={() => setWordsListFilter("all")}
+									className={`px-2.5 py-1 rounded-pill transition ${
+										wordsListFilter === "all"
+											? "bg-surface text-ink shadow-2xs font-extrabold"
+											: "text-muted hover:text-ink"
+									}`}
+								>
+									Semua ({reviewedLogs.length})
+								</button>
+								<button
+									type="button"
+									onClick={() => setWordsListFilter("again")}
+									className={`px-2.5 py-1 rounded-pill transition ${
+										wordsListFilter === "again"
+											? "bg-danger/15 text-danger font-extrabold shadow-2xs"
+											: "text-muted hover:text-ink"
+									}`}
+								>
+									Lupa ({reviewedLogs.filter((c) => c.rating === 1).length})
+								</button>
+								<button
+									type="button"
+									onClick={() => setWordsListFilter("success")}
+									className={`px-2.5 py-1 rounded-pill transition ${
+										wordsListFilter === "success"
+											? "bg-success/15 text-success font-extrabold shadow-2xs"
+											: "text-muted hover:text-ink"
+									}`}
+								>
+									Hapal ({reviewedLogs.filter((c) => c.rating > 1).length})
+								</button>
+							</div>
+						</div>
+
+						{/* List Items */}
+						<div className="space-y-2 max-h-72 overflow-y-auto pr-1 scrollbar-none">
+							{reviewedLogs
+								.filter((c) => {
+									if (wordsListFilter === "again") return c.rating === 1;
+									if (wordsListFilter === "success") return c.rating > 1;
+									return true;
+								})
+								.map((c) => {
+									const parsed = parseBackContent(c.back);
+									const ratingMeta =
+										c.rating === 1
+											? {
+													label: "Ulang",
+													bg: "bg-danger/10 text-danger border-danger/20",
+												}
+											: c.rating === 2
+												? {
+														label: "Susah",
+														bg: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+													}
+												: c.rating === 3
+													? {
+															label: "Oke",
+															bg: "bg-success/10 text-success border-success/20",
+														}
+													: {
+															label: "Gampang",
+															bg: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+														};
+
+									return (
+										<div
+											key={c.id}
+											className="p-3 rounded-control bg-surface-2/40 border border-edge/60 flex items-center justify-between gap-3 hover:border-primary/40 transition group"
+										>
+											<div className="min-w-0 flex-1">
+												<div className="flex items-center gap-2">
+													<button
+														type="button"
+														onClick={() => void speak(c.front, "en-US")}
+														className="font-black text-ink text-sm sm:text-base hover:text-primary transition flex items-center gap-1.5"
+													>
+														<span>{c.front}</span>
+														<Icon
+															name="volume"
+															className="w-3.5 h-3.5 text-muted group-hover:text-primary transition-colors"
+														/>
+													</button>
+												</div>
+												<div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+													{parsed.items.map((item) => (
+														<div
+															key={`${item.pos ?? "def"}:${item.text}`}
+															className="inline-flex items-center gap-1 text-xs"
+														>
+															{item.pos && (
+																<span
+																	title={item.posFull}
+																	className={`font-mono text-[9px] font-extrabold uppercase px-1 py-0.5 rounded border ${
+																		item.tone ??
+																		"bg-surface text-muted border-edge/60"
+																	}`}
+																>
+																	{item.posLabel ?? item.pos}
+																</span>
+															)}
+															<span className="text-xs text-ink/90 font-medium">
+																{item.text}
+															</span>
+														</div>
+													))}
+												</div>
+											</div>
+
+											{/* Rating Badge */}
+											<span
+												className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-pill border shrink-0 ${ratingMeta.bg}`}
+											>
+												{ratingMeta.label}
+											</span>
+										</div>
+									);
+								})}
+						</div>
+
+						<Link
+							to="/statistik"
+							className="text-center block text-xs font-bold text-primary hover:underline pt-1"
+						>
+							Lihat Semua Riwayat Sesi Latihan di Menu Statistik →
+						</Link>
+					</div>
+				)}
+
+				<div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3">
 					<button
 						type="button"
 						onClick={() => {
 							setCursor(0);
 							setMissedCards([]);
+							setReviewedLogs([]);
+							setHistorySaved(false);
 							setSessionCoins(0);
 							setSessionCount(0);
 							setSessionNonce((n) => n + 1);
 						}}
-						className="flex-1 py-3.5 border border-edge bg-surface text-ink font-bold rounded-control hover:bg-surface-2 active:scale-[0.98] transition"
+						className="w-full sm:flex-1 py-3.5 border border-edge bg-surface text-ink font-bold rounded-control hover:bg-surface-2 active:scale-[0.98] transition text-sm"
 					>
 						Ulangi Sesi
 					</button>
 					<Link
 						to="/"
-						className="flex-1 text-center py-3.5 bg-primary text-white font-bold rounded-control hover:bg-primary-hover active:scale-[0.98] transition shadow"
+						className="w-full sm:flex-1 text-center py-3.5 bg-primary text-white font-bold rounded-control hover:bg-primary-hover active:scale-[0.98] transition shadow text-sm"
 					>
 						Kembali ke Beranda
 					</Link>
@@ -395,88 +595,121 @@ export function LatihanPage() {
 	const stageMeta = tahap ? getBandMeta(tahap) : null;
 
 	return (
-		<div className="py-6">
-			{/* Header */}
-			<div className="flex items-center justify-between mb-4">
-				<Link
-					to="/"
-					className="font-mono text-[12px] font-bold text-muted hover:text-ink transition-colors uppercase tracking-wide inline-flex items-center gap-1"
-				>
-					<Icon name="chevron-left" className="w-4 h-4" />
-					Beranda
-				</Link>
-				<div className="flex items-center gap-2">
-					<button
-						type="button"
-						onClick={() => void toggleTts()}
-						aria-label={ttsEnabled ? "Matikan suara" : "Nyalakan suara"}
-						title={ttsEnabled ? "Suara Aktif" : "Suara Mati"}
-						className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
-							ttsEnabled
-								? "bg-primary/10 text-primary"
-								: "bg-surface-2 text-muted opacity-60"
-						}`}
+		<div className="flex-1 flex flex-col justify-between h-full w-full max-w-xl md:max-w-2xl mx-auto px-1 py-1 select-none overflow-hidden min-h-0">
+			{/* Header Navigation & Session Stats */}
+			<div className="shrink-0 space-y-2.5">
+				<div className="flex items-center justify-between gap-3 px-1">
+					<Link
+						to="/"
+						className="font-mono text-xs font-bold text-muted hover:text-ink transition-colors uppercase tracking-wider inline-flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-surface-2"
 					>
-						<Icon name="volume" className="w-4 h-4" />
-					</button>
-					{stageMeta && (
-						<span
-							className={`font-mono text-[11px] font-bold uppercase px-2.5 py-1 rounded-[8px] ${stageMeta.colorClass}`}
+						<Icon name="chevron-left" className="w-4 h-4" />
+						<span>Beranda</span>
+					</Link>
+
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={() => void toggleTts()}
+							aria-label={
+								ttsEnabled
+									? "Matikan suara otomatis"
+									: "Nyalakan suara otomatis"
+							}
+							title={
+								ttsEnabled ? "Suara Aktif (Tekan S untuk putar)" : "Suara Mati"
+							}
+							className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition shadow-2xs border ${
+								ttsEnabled
+									? "bg-primary/10 text-primary border-primary/20"
+									: "bg-surface-2 text-muted border-edge/60 opacity-70"
+							}`}
 						>
-							{stageMeta.title}
+							<Icon name="volume" className="w-4 h-4" />
+						</button>
+
+						{stageMeta && (
+							<span
+								className={`font-mono text-[10.5px] font-bold uppercase px-2.5 py-0.5 sm:py-1 rounded-[8px] ${stageMeta.colorClass}`}
+							>
+								{stageMeta.title}
+							</span>
+						)}
+
+						<span className="font-mono text-xs font-bold text-ink bg-surface border border-edge/80 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-pill shadow-2xs">
+							{cursor + 1}/{totalCards}
 						</span>
-					)}
-					<span className="font-mono text-[11px] font-bold text-muted bg-surface border border-edge px-3 py-1 rounded-pill">
-						{cursor}/{totalCards}
-					</span>
+					</div>
+				</div>
+
+				{/* Progress bar */}
+				<div className="w-full h-1.5 sm:h-2 bg-surface-2 rounded-full overflow-hidden shadow-inner">
+					<div
+						className="h-full bg-gradient-to-r from-primary via-indigo-500 to-primary rounded-full progress-fill"
+						style={{ width: `${progressPercent}%` }}
+					/>
 				</div>
 			</div>
 
-			{/* Progress bar */}
-			<div className="w-full h-2 bg-surface-2 rounded-full mb-6 overflow-hidden">
-				<div
-					className="h-full bg-primary rounded-full progress-fill"
-					style={{ width: `${progressPercent}%` }}
+			{/* Center Card Container — Perfectly Centered Vertically */}
+			<div className="flex-1 flex flex-col justify-center items-center py-2 min-h-0 w-full my-auto">
+				<EkspedisiCard
+					key={`${currentCard.id}-${cursor}`}
+					card={currentCard}
+					ttsEnabled={ttsEnabled}
+					onReviewComplete={(result) => {
+						setReviewedLogs((prev) => {
+							const existing = prev.filter((c) => c.id !== currentCard.id);
+							return [
+								...existing,
+								{
+									id: currentCard.id,
+									front: currentCard.front,
+									back: currentCard.back,
+									category: currentCard.category,
+									rating: result.rating,
+								},
+							];
+						});
+
+						if (result.rating === Rating.Again) {
+							requeueAgain(queue, cursor, currentCard);
+							setMissedCards((prev) => {
+								if (prev.some((c) => c.id === currentCard.id)) return prev;
+								return [...prev, currentCard];
+							});
+							setRatingCounts((prev) => ({ ...prev, again: prev.again + 1 }));
+						} else if (result.rating === Rating.Hard) {
+							setRatingCounts((prev) => ({ ...prev, hard: prev.hard + 1 }));
+						} else if (result.rating === Rating.Good) {
+							setRatingCounts((prev) => ({ ...prev, good: prev.good + 1 }));
+						} else if (result.rating === Rating.Easy) {
+							setRatingCounts((prev) => ({ ...prev, easy: prev.easy + 1 }));
+						}
+						setQueue([...queue]);
+						setSessionCoins((c) => c + result.xpGained);
+						setSessionCount((n) => n + 1);
+						setCursor((i) => i + 1);
+					}}
 				/>
 			</div>
 
-			{sessionCapped && queue.length > 0 && (
-				<p className="text-[11px] text-muted text-center mb-3">
-					Sesi ini disesuaikan dengan target harianmu — lanjut kapan saja.
-				</p>
-			)}
-
-			<EkspedisiCard
-				key={`${currentCard.id}-${cursor}`}
-				card={currentCard}
-				ttsEnabled={ttsEnabled}
-				onReviewComplete={(result) => {
-					if (result.rating === Rating.Again) {
-						requeueAgain(queue, cursor, currentCard);
-						setMissedCards((prev) => {
-							if (prev.some((c) => c.id === currentCard.id)) return prev;
-							return [...prev, currentCard];
-						});
-						setRatingCounts((prev) => ({ ...prev, again: prev.again + 1 }));
-					} else if (result.rating === Rating.Hard) {
-						setRatingCounts((prev) => ({ ...prev, hard: prev.hard + 1 }));
-					} else if (result.rating === Rating.Good) {
-						setRatingCounts((prev) => ({ ...prev, good: prev.good + 1 }));
-					} else if (result.rating === Rating.Easy) {
-						setRatingCounts((prev) => ({ ...prev, easy: prev.easy + 1 }));
-					}
-					setQueue([...queue]);
-					setSessionCoins((c) => c + result.xpGained);
-					setSessionCount((n) => n + 1);
-					setCursor((i) => i + 1);
-				}}
-			/>
-
-			<div className="flex items-center justify-between text-[11px] text-muted mt-6 font-medium px-1">
-				<span>Tekan Spasi untuk membalik kartu</span>
-				<span className="hidden md:inline">
-					Gunakan tombol 1–4 untuk menilai
-				</span>
+			{/* Keyboard Shortcut Hints Footer */}
+			<div className="flex items-center justify-between text-xs text-muted font-medium px-2 py-1 shrink-0">
+				<div className="flex items-center gap-1.5">
+					<span className="kbd-hint">Spasi</span>
+					<span>Balik kartu</span>
+				</div>
+				<div className="hidden md:flex items-center gap-3">
+					<div className="flex items-center gap-1">
+						<span className="kbd-hint">S</span>
+						<span>Audio</span>
+					</div>
+					<div className="flex items-center gap-1.5">
+						<span className="kbd-hint">1–4</span>
+						<span>Pilihan nilai</span>
+					</div>
+				</div>
 			</div>
 		</div>
 	);
@@ -494,16 +727,18 @@ function SummaryTile({
 	tone: "accent" | "danger";
 }) {
 	const tones = {
-		accent: "bg-accent/15 text-accent-ink",
-		danger: "bg-danger/10 text-danger",
+		accent: "bg-accent/15 text-accent-ink border-accent/25",
+		danger: "bg-danger/10 text-danger border-danger/25",
 	} as const;
 	return (
 		<div
-			className={`rounded-card p-4 text-center ${tones[tone]} flex flex-col items-center justify-center shadow-sm`}
+			className={`rounded-card p-3.5 text-center border ${tones[tone]} flex flex-col items-center justify-center shadow-xs`}
 		>
-			<Icon name={icon} className="w-6 h-6 mb-1" />
-			<p className="text-lg font-extrabold leading-tight">{value}</p>
-			<p className="text-[11px] font-semibold opacity-80 mt-0.5">{label}</p>
+			<Icon name={icon} className="w-5 h-5 mb-1 opacity-90" />
+			<p className="text-lg font-black leading-tight text-ink">{value}</p>
+			<p className="text-[11px] font-semibold opacity-75 mt-0.5 truncate">
+				{label}
+			</p>
 		</div>
 	);
 }

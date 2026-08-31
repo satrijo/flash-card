@@ -26,3 +26,36 @@ export const cards = sqliteTable("cards", {
     .default(sql`(strftime('%s', 'now'))`)
     .notNull(),
 });
+
+export const communityMessages = sqliteTable("community_messages", {
+  id: text("id").primaryKey(),
+  username: text("username").notNull(),
+  deviceId: text("device_id").notNull(),
+  content: text("content").notNull(),
+  flashcardRef: text("flashcard_ref"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const communityPresence = sqliteTable("community_presence", {
+  deviceId: text("device_id").primaryKey(),
+  username: text("username").notNull(),
+  activity: text("activity").default("Online").notNull(),
+  lastSeen: integer("last_seen").notNull(),
+});
+
+export const userHandles = sqliteTable("user_handles", {
+  handle: text("handle").primaryKey(),
+  deviceId: text("device_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const userCloudBackups = sqliteTable("user_cloud_backups", {
+  handle: text("handle").primaryKey(),
+  deviceId: text("device_id").notNull(),
+  backupData: text("backup_data").notNull(),
+  cardsCount: integer("cards_count").default(0).notNull(),
+  streakCount: integer("streak_count").default(0).notNull(),
+  xpCount: integer("xp_count").default(0).notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
