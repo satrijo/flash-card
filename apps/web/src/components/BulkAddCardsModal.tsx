@@ -6,6 +6,7 @@
 import { createEmptyCard } from "@flashcard/shared";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useRef, useState } from "react";
+import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { trackEvent } from "../lib/analytics";
 import { parseBackContent } from "../lib/bands";
 import { db, type LocalCard } from "../lib/db";
@@ -320,6 +321,7 @@ export function BulkAddCardsModal({
 		}
 
 		await db.cards.bulkAdd(toAdd);
+		scheduleCloudPush(2000);
 		setIsSubmitting(false);
 		setResultCount(toAdd.length);
 		setAddedCategories(stats.categories);

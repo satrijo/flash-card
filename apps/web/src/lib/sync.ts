@@ -128,12 +128,29 @@ export async function loadBundledSeed(): Promise<boolean> {
 	}
 }
 
+export type ManualSyncResult =
+	| { status: "up-to-date"; total: number }
+	| { status: "updated"; downloaded: number; total: number }
+	| { status: "offline" }
+	| { status: "error"; error: string };
+
+/**
+ * Periksa pembaruan kosakata secara manual dan unduh jika terdapat versi baru di server.
+ */
+export async function checkAndUpdateDeck(): Promise<ManualSyncResult> {
+	return runSync({ force: false });
+}
+
 /**
  * Jalankan siklus sync. Aman dipanggil berulang — hanya satu yang jalan.
  * `force` = abaikan version-check dan download ulang seluruh deck.
  */
-export async function runSync(options?: { force?: boolean }): Promise<void> {
-	if (started) return;
+export async function runSync(options?: {
+	force?: boolean;
+}): Promise<ManualSyncResult> {
+	if (started) {
+		return { status: "error", error: "Sinkronisasi sedang berjalan" };
+	}
 	const cardCount = await db.cards.count();
 
 	if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -145,7 +162,7 @@ export async function runSync(options?: { force?: boolean }): Promise<void> {
 		} else {
 			setState({ phase: "done", downloaded: cardCount, total: cardCount });
 		}
-		return;
+		return { status: "offline" };
 	}
 
 	started = true;
@@ -156,45 +173,56 @@ export async function runSync(options?: { force?: boolean }): Promise<void> {
 		let total = 0;
 		let seenVersion = "";
 
+		// Ambil version & count dari /api/deck/version
+		let res: Response;
+		try {
+			res = await fetch(`${apiUrl()}/api/deck/version`, {
+				signal: AbortSignal.timeout(4000),
+			});
+		} catch (fetchErr) {
+			// API server down / unreachable / timeout — fallback ke seed lokal jika kosong
+			if (cardCount === 0) {
+				const seeded = await loadBundledSeed();
+				if (seeded) return { status: "updated", downloaded: 0, total: 0 };
+			} else {
+				setState({ phase: "done", downloaded: cardCount, total: cardCount });
+				return {
+					status: "error",
+					error:
+						fetchErr instanceof Error
+							? fetchErr.message
+							: "Gagal terhubung ke server",
+				};
+			}
+			throw fetchErr;
+		}
+
+		if (!res.ok) {
+			if (cardCount === 0) {
+				const seeded = await loadBundledSeed();
+				if (seeded) return { status: "updated", downloaded: 0, total: 0 };
+			} else {
+				setState({ phase: "done", downloaded: cardCount, total: cardCount });
+				return {
+					status: "error",
+					error: `Pemeriksaan versi gagal (${res.status})`,
+				};
+			}
+			throw new Error(`version check gagal (${res.status})`);
+		}
+
+		const data = (await res.json()) as { version: string; count: number };
+		total = data.count;
+		seenVersion = data.version;
+
 		if (!needDownload) {
-			let res: Response;
-			try {
-				res = await fetch(`${apiUrl()}/api/deck/version`, {
-					signal: AbortSignal.timeout(3000),
-				});
-			} catch (fetchErr) {
-				// API server down / unreachable / timeout — fallback ke seed lokal jika kosong
-				if (cardCount === 0) {
-					const seeded = await loadBundledSeed();
-					if (seeded) return;
-				} else {
-					setState({ phase: "done", downloaded: cardCount, total: cardCount });
-					return;
-				}
-				throw fetchErr;
-			}
-
-			if (!res.ok) {
-				if (cardCount === 0) {
-					const seeded = await loadBundledSeed();
-					if (seeded) return;
-				} else {
-					setState({ phase: "done", downloaded: cardCount, total: cardCount });
-					return;
-				}
-				throw new Error(`version check gagal (${res.status})`);
-			}
-
-			const data = (await res.json()) as { version: string; count: number };
-			total = data.count;
-			seenVersion = data.version;
 			const localVersion = await getMeta("deckVersion");
 			needDownload = localVersion !== data.version;
 		}
 
 		if (!needDownload) {
 			setState({ phase: "done", total });
-			return;
+			return { status: "up-to-date", total };
 		}
 
 		setState({ phase: "downloading", downloaded: 0, total });
@@ -253,16 +281,19 @@ export async function runSync(options?: { force?: boolean }): Promise<void> {
 			{ key: "lastSyncAt", value: new Date().toISOString() },
 		]);
 		setState({ phase: "done", downloaded: offset, total });
+		return { status: "updated", downloaded: offset, total };
 	} catch (error) {
+		const errMsg = error instanceof Error ? error.message : String(error);
 		if (cardCount > 0) {
 			// Jika kartu lokal ada, jangan biarkan error memblokir user
 			setState({ phase: "done", downloaded: cardCount, total: cardCount });
 		} else {
 			setState({
 				phase: "error",
-				error: error instanceof Error ? error.message : String(error),
+				error: errMsg,
 			});
 		}
+		return { status: "error", error: errMsg };
 	} finally {
 		started = false;
 	}

@@ -1,12 +1,13 @@
 /*
  * EkspedisiCard — kartu flashcard SRS dual-side (depan EN / belakang ID).
- * Desain: Modern Minimalist & Clean Editorial.
+ * Desain: Modern Minimalist & Clean Editorial (Option 3 Redesign).
  * Fitur: TTS otomatis/manual, hierarki tipografi tegas, label kelas kata POS,
- * callout contoh kalimat beraksen, serta 4 tombol ulasan ergonomis FSRS.
+ * kartu lapang bebas redundansi, serta 4 tombol ulasan ergonomis FSRS di luar kartu.
  */
 
 import { fsrsEngine, Rating } from "@flashcard/shared";
 import { useCallback, useEffect, useState } from "react";
+import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { getBandMeta, parseBackContent } from "../lib/bands";
 import { db, type LocalCard } from "../lib/db";
 import { awardReview } from "../lib/game";
@@ -136,6 +137,7 @@ export function EkspedisiCard({
 
 				const award = await awardReview(rating, now);
 				setCoinFeedback(award.xpGained);
+				scheduleCloudPush(8000);
 
 				// Beri waktu animasi poin terlihat sebelum beralih ke kartu berikutnya
 				setTimeout(() => {
@@ -231,10 +233,10 @@ export function EkspedisiCard({
 	] as const;
 
 	return (
-		<div className="w-full max-w-lg md:max-w-xl mx-auto animate-fade-in-up relative select-none">
+		<div className="w-full max-w-lg md:max-w-xl mx-auto animate-fade-in-up relative select-none flex flex-col gap-3">
 			{/* Poin XP melayang saat menjawab */}
 			{coinFeedback !== null && (
-				<div className="absolute -top-4 right-3 z-30 animate-coin-pop pointer-events-none">
+				<div className="absolute -top-5 right-3 z-30 animate-coin-pop pointer-events-none">
 					<span className="px-3.5 py-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-500/30 inline-flex items-center gap-1.5 border border-amber-300/40">
 						<Icon name="star" className="w-4 h-4 fill-amber-950" />+
 						{coinFeedback} XP
@@ -242,23 +244,23 @@ export function EkspedisiCard({
 				</div>
 			)}
 
-			{/* Kartu Utama dengan 3D Perspective & Proporsi Alami */}
+			{/* Kartu Utama dengan 3D Perspective & Proporsi Lapang */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-flip card face */}
+			{/* biome-ignore lint/a11y/useKeyWithClickEvents: handled via window keydown listener and explicit action button */}
 			<div
-				className="relative w-full h-[280px] xs:h-[300px] sm:h-[325px] md:h-[345px] max-h-[48dvh] bg-surface rounded-[20px] sm:rounded-[26px] border border-edge/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-[0_16px_36px_-8px_rgba(0,0,0,0.7)] transition-all duration-300 overflow-hidden"
+				className="relative w-full h-[260px] xs:h-[280px] sm:h-[300px] md:h-[320px] bg-surface rounded-[22px] sm:rounded-[28px] border border-edge/80 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] dark:shadow-[0_16px_36px_-8px_rgba(0,0,0,0.7)] transition-all duration-300 overflow-hidden cursor-pointer"
 				style={{ perspective: "1400px" }}
+				onClick={() => {
+					if (!isFlipped) handleFlip();
+				}}
 			>
 				<div
 					className={`flip-card-inner w-full h-full ${isFlipped ? "flipped" : ""}`}
 				>
 					{/* ======================================================== */}
-					{/* biome-ignore lint/a11y/noStaticElementInteractions: flashcard face container click-to-flip */}
-					{/* biome-ignore lint/a11y/useKeyWithClickEvents: handled via window keydown listener and action button */}
-					<div
-						onClick={() => {
-							if (!isFlipped) handleFlip();
-						}}
-						className="flip-card-front absolute inset-0 flex flex-col justify-between p-4 sm:p-5 md:p-6 bg-surface cursor-pointer overflow-hidden"
-					>
+					{/* SISI DEPAN (Kata Bahasa Inggris)                          */}
+					{/* ======================================================== */}
+					<div className="flip-card-front absolute inset-0 flex flex-col justify-between p-5 sm:p-6 bg-surface overflow-hidden">
 						{/* Header Metadata Bar */}
 						<div className="flex items-center justify-between gap-3 shrink-0">
 							<div className="flex items-center gap-2">
@@ -285,7 +287,7 @@ export function EkspedisiCard({
 								}}
 								aria-label="Dengarkan pengucapan kata"
 								title="Dengarkan pengucapan (Tekan S)"
-								className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shadow-2xs"
+								className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shadow-2xs cursor-pointer"
 							>
 								<Icon name="volume" className="w-4 h-4" />
 							</button>
@@ -298,147 +300,144 @@ export function EkspedisiCard({
 							</h2>
 						</div>
 
-						{/* Tombol Aksi Bawah */}
-						{!isFlipped && (
-							<div className="pt-1.5 shrink-0">
-								<button
-									type="button"
-									onClick={(e) => {
-										e.stopPropagation();
-										handleFlip();
-									}}
-									className="w-full py-3 sm:py-3.5 px-4 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary-hover hover:to-indigo-700 text-white text-sm sm:text-base font-extrabold rounded-control active:scale-[0.98] transition-all tactile-btn flex items-center justify-between shadow-md shadow-primary/25 group"
-								>
-									<span className="flex items-center gap-2">
-										<Icon name="sparkles" className="w-4 h-4 text-white/90" />
-										<span>Lihat Artinya</span>
-									</span>
-									<span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-md text-white/95 backdrop-blur-xs group-hover:translate-x-0.5 transition-transform">
-										<span>Spasi ␣</span>
-										<Icon name="arrow-right" className="w-3.5 h-3.5" />
-									</span>
-								</button>
-							</div>
-						)}
+						{/* Petunjuk Bawah Sisi Depan */}
+						<div className="text-center shrink-0">
+							<span className="text-[11px] font-medium text-muted/70 inline-flex items-center gap-1">
+								<span>Ketuk kartu atau tombol di bawah untuk melihat arti</span>
+							</span>
+						</div>
 					</div>
 
 					{/* ======================================================== */}
-					{/* SISI BELAKANG (Arti, POS, Contoh & Tombol Ulasan FSRS)    */}
+					{/* SISI BELAKANG (Arti Bersih, POS & Contoh Ramping)        */}
 					{/* ======================================================== */}
-					{isFlipped && (
-						<div className="flip-card-back absolute inset-0 flex flex-col justify-between p-4 sm:p-5 md:p-6 bg-surface overflow-hidden">
-							{/* Header Bar */}
-							<div className="pb-2 sm:pb-2.5 border-b border-edge/70 flex items-center justify-between gap-3 shrink-0">
-								<div className="flex items-center gap-2 min-w-0">
-									<span
-										className={`inline-block font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-[6px] ${bandMeta.colorClass}`}
-									>
-										{bandMeta.title}
-									</span>
-									<span className="font-mono text-xs font-bold text-muted truncate bg-surface-2 px-2 py-0.5 rounded-md border border-edge/50">
-										{card.front}
-									</span>
-								</div>
-
-								<button
-									type="button"
-									onClick={() => void speak(parsed.gloss || card.back, "id-ID")}
-									aria-label="Dengarkan terjemahan"
-									title="Dengarkan terjemahan (Tekan S)"
-									className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shrink-0 shadow-2xs"
+					<div className="flip-card-back absolute inset-0 flex flex-col justify-between p-5 sm:p-6 bg-surface overflow-hidden">
+						{/* Header Bar: Kategori + Word Badge + Audio */}
+						<div className="pb-2.5 border-b border-edge/70 flex items-center justify-between gap-3 shrink-0">
+							<div className="flex items-center gap-2 min-w-0">
+								<span
+									className={`inline-block font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-[6px] ${bandMeta.colorClass}`}
 								>
-									<Icon name="volume" className="w-4 h-4" />
-								</button>
-							</div>
-
-							{/* Area Tengah: Terjemahan, Kelas Kata & Contoh */}
-							<div className="flex-1 flex flex-col justify-center py-2 overflow-y-auto scrollbar-none text-center my-auto min-h-0">
-								<p className="text-[11px] font-mono font-bold uppercase tracking-widest text-muted/70 mb-1.5 shrink-0">
+									{bandMeta.title}
+								</span>
+								<span className="font-mono text-xs font-bold text-muted truncate bg-surface-2 px-2.5 py-0.5 rounded-md border border-edge/50">
 									{card.front}
-								</p>
-
-								{/* Daftar arti kata dengan label POS */}
-								<div className="flex flex-col items-center justify-center gap-1.5 max-w-lg mx-auto w-full px-1">
-									{parsed.items.map((item) => (
-										<div
-											key={`${item.pos ?? "def"}:${item.text}`}
-											className="flex flex-wrap items-center justify-center gap-2 py-0.5"
-										>
-											{item.pos && (
-												<span
-													title={item.posFull}
-													className={`font-mono text-[9.5px] sm:text-[10px] font-black uppercase px-1.5 py-0.5 rounded-[6px] border ${
-														item.tone ??
-														"bg-surface-2 text-muted border-edge/60"
-													} shrink-0 select-none shadow-2xs`}
-												>
-													{item.posLabel ?? item.pos}
-												</span>
-											)}
-											<span className="text-lg sm:text-2xl md:text-3xl font-black text-ink leading-tight tracking-tight">
-												{item.text}
-											</span>
-										</div>
-									))}
-								</div>
-
-								{/* Contoh Kalimat (Editorial Quote Block) */}
-								{parsed.exampleEn && (
-									<div className="mt-2.5 p-2.5 sm:p-3 rounded-r-xl rounded-l-xs bg-surface-2/60 border-l-[3px] border-primary text-left space-y-0.5 shadow-2xs">
-										<p className="text-xs sm:text-[12.5px] font-semibold text-ink leading-relaxed">
-											"{parsed.exampleEn}"
-										</p>
-										{parsed.exampleId && (
-											<p className="text-[10.5px] sm:text-[11.5px] text-muted leading-snug">
-												{parsed.exampleId}
-											</p>
-										)}
-									</div>
-								)}
+								</span>
 							</div>
 
-							{/* 4 Tombol Ulasan Ergonomis FSRS */}
-							<div className="pt-2 grid grid-cols-4 gap-1.5 sm:gap-2 shrink-0">
-								{ratingButtons.map((b) => (
-									<button
-										type="button"
-										key={b.label}
-										onClick={() => void handleReview(b.rating)}
-										disabled={isSubmitting}
-										className="relative flex flex-col items-center justify-center gap-0.5 py-2 sm:py-2.5 px-1 border rounded-control transition-all disabled:opacity-50 active:scale-[0.96] tactile-btn shadow-xs hover-lift cursor-pointer"
-										style={{
-											backgroundColor: b.bg,
-											borderColor: b.border,
-											color: b.text,
-										}}
-										onMouseEnter={(e) => {
-											e.currentTarget.style.borderColor = b.text;
-										}}
-										onMouseLeave={(e) => {
-											e.currentTarget.style.borderColor = b.border;
-										}}
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									void speak(parsed.gloss || card.back, "id-ID");
+								}}
+								aria-label="Dengarkan terjemahan"
+								title="Dengarkan terjemahan (Tekan S)"
+								className="w-8 h-8 sm:w-9 sm:h-9 inline-flex items-center justify-center rounded-full bg-surface-2 border border-edge/60 text-muted hover:text-primary hover:border-primary/40 hover:bg-primary/10 active:scale-95 transition-all shrink-0 shadow-2xs cursor-pointer"
+							>
+								<Icon name="volume" className="w-4 h-4" />
+							</button>
+						</div>
+
+						{/* Area Tengah: Hero Terjemahan & POS (Lapang & Fokus) */}
+						<div className="flex-1 flex flex-col justify-center items-center text-center px-1 py-3 my-auto min-h-0">
+							<div className="space-y-1.5 max-w-lg mx-auto w-full">
+								{parsed.items.map((item) => (
+									<div
+										key={`${item.pos ?? "def"}:${item.text}`}
+										className="flex flex-wrap items-center justify-center gap-2 py-0.5"
 									>
-										<span className="hidden md:inline-block absolute top-1 right-1 text-[9px] font-mono font-bold opacity-60">
-											{b.keyHint}
+										{item.pos && (
+											<span
+												title={item.posFull}
+												className={`font-mono text-[10px] sm:text-[10.5px] font-extrabold uppercase px-2 py-0.5 rounded-pill border ${
+													item.tone ?? "bg-surface-2 text-muted border-edge/60"
+												} shrink-0 select-none shadow-2xs`}
+											>
+												{item.posLabel ?? item.pos}
+											</span>
+										)}
+										<span className="text-xl sm:text-2xl md:text-3xl font-black text-ink leading-tight tracking-tight">
+											{item.text}
 										</span>
-										<span className="text-xs sm:text-sm font-extrabold truncate w-full text-center">
-											{b.label}
-										</span>
-										<span
-											className="font-mono text-[9px] sm:text-[10px] font-bold opacity-90 truncate w-full text-center"
-											style={{ color: b.text }}
-										>
-											{formatInterval(
-												preview[b.rating].card.due,
-												nowForPreview,
-											)}
-										</span>
-									</button>
+									</div>
 								))}
 							</div>
 						</div>
-					)}
+
+						{/* Contoh Kalimat (Ramping, Halus di Bawah Kartu) */}
+						{parsed.exampleEn && (
+							<div className="shrink-0 p-2.5 sm:p-3 rounded-xl bg-surface-2/60 border border-edge/70 text-left space-y-0.5">
+								<p className="text-xs sm:text-[12.5px] font-medium text-ink leading-snug italic">
+									"{parsed.exampleEn}"
+								</p>
+								{parsed.exampleId && (
+									<p className="text-[11px] text-muted leading-tight">
+										{parsed.exampleId}
+									</p>
+								)}
+							</div>
+						)}
+					</div>
 				</div>
+			</div>
+
+			{/* ======================================================== */}
+			{/* KONTROL AKSI LUAR KARTU (Thumb Zone / Focus Area)        */}
+			{/* ======================================================== */}
+			<div className="shrink-0 w-full pt-1">
+				{!isFlipped ? (
+					<button
+						type="button"
+						onClick={handleFlip}
+						className="w-full py-3.5 px-4 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary-hover hover:to-indigo-700 text-white text-sm sm:text-base font-extrabold rounded-control active:scale-[0.98] transition-all tactile-btn flex items-center justify-between shadow-md shadow-primary/25 group cursor-pointer"
+					>
+						<span className="flex items-center gap-2">
+							<Icon name="sparkles" className="w-4 h-4 text-white/90" />
+							<span>Lihat Artinya</span>
+						</span>
+						<span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-md text-white/95 backdrop-blur-xs group-hover:translate-x-0.5 transition-transform">
+							<span>Spasi ␣</span>
+							<Icon name="arrow-right" className="w-3.5 h-3.5" />
+						</span>
+					</button>
+				) : (
+					<div className="grid grid-cols-4 gap-1.5 sm:gap-2 animate-fade-in-up">
+						{ratingButtons.map((b) => (
+							<button
+								type="button"
+								key={b.label}
+								onClick={() => void handleReview(b.rating)}
+								disabled={isSubmitting}
+								className="relative flex flex-col items-center justify-center gap-0.5 py-2.5 sm:py-3 px-1 border rounded-control transition-all disabled:opacity-50 active:scale-[0.96] tactile-btn shadow-xs hover-lift cursor-pointer"
+								style={{
+									backgroundColor: b.bg,
+									borderColor: b.border,
+									color: b.text,
+								}}
+								onMouseEnter={(e) => {
+									e.currentTarget.style.borderColor = b.text;
+								}}
+								onMouseLeave={(e) => {
+									e.currentTarget.style.borderColor = b.border;
+								}}
+							>
+								<span className="hidden md:inline-block absolute top-1 right-1.5 text-[9px] font-mono font-bold opacity-60">
+									{b.keyHint}
+								</span>
+								<span className="text-xs sm:text-sm font-extrabold truncate w-full text-center">
+									{b.label}
+								</span>
+								<span
+									className="font-mono text-[9.5px] sm:text-[10.5px] font-bold opacity-90 truncate w-full text-center"
+									style={{ color: b.text }}
+								>
+									{formatInterval(preview[b.rating].card.due, nowForPreview)}
+								</span>
+							</button>
+						))}
+					</div>
+				)}
 			</div>
 		</div>
 	);

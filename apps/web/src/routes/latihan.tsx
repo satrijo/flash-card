@@ -11,6 +11,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { EkspedisiCard } from "../components/EkspedisiCard";
 import { Icon, type IconName } from "../components/Icon";
+import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { trackEvent } from "../lib/analytics";
 import {
 	bandIndex,
@@ -113,6 +114,8 @@ function LatihanPage() {
 					xpGained: sessionCoins,
 					ratings: ratingCounts,
 					cards: reviewedLogs,
+				}).then(() => {
+					scheduleCloudPush(2000);
 				});
 			}
 		}

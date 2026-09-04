@@ -48,7 +48,7 @@ export async function buildBackup(): Promise<BackupFile> {
 
 // JSON round-trip mengubah Date jadi string ISO — kembalikan ke Date agar
 // query due (below(now)) tetap bekerja setelah restore.
-function reviveDate(value: Date | string): Date {
+export function reviveDate(value: Date | string): Date {
 	return value instanceof Date ? value : new Date(value);
 }
 

@@ -200,6 +200,14 @@ const PATHS: Record<string, ReactNode> = {
 			<line x1="12" x2="12" y1="2" y2="15" />
 		</>
 	),
+	"alert-circle": (
+		<>
+			<circle cx="12" cy="12" r="10" />
+			<line x1="12" y1="8" x2="12" y2="12" />
+			<line x1="12" y1="16" x2="12.01" y2="16" />
+		</>
+	),
+	cloud: <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />,
 };
 
 export type IconName = keyof typeof PATHS;

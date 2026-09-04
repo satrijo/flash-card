@@ -84,13 +84,23 @@ function KomunitasPage() {
 	// Load flashcards for sharing
 	const allCards = useLiveQuery(() => db.cards.toArray(), []);
 
-	// Muat pesan lokal saat pertama kali buka (Offline-First)
+	// Muat pesan lokal saat pertama kali buka (Offline-First) & sinkronkan username event
 	useEffect(() => {
 		void loadLocalCommunityMessages(50).then((localMsgs) => {
 			if (localMsgs.length > 0) {
 				setMessages((prev) => mergeMessages(prev, localMsgs));
 			}
 		});
+
+		const onUsernameChanged = (e: Event) => {
+			const customEvent = e as CustomEvent<string>;
+			if (customEvent.detail) {
+				setUsername(customEvent.detail);
+			}
+		};
+		window.addEventListener("kata-username-changed", onUsernameChanged);
+		return () =>
+			window.removeEventListener("kata-username-changed", onUsernameChanged);
 	}, []);
 
 	// Sinkronisasi Real-Time Multi-User (D1 Database + WebSocket + Heartbeat)

@@ -105,3 +105,6 @@ temp
 __unconfig*
 todos.json
 *.tsbuildinfo
+
+openspec
+workflows

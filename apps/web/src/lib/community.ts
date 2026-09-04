@@ -100,11 +100,11 @@ export function getCommunityUsername(): string {
 	if (typeof window === "undefined") return "kata-hero";
 	try {
 		const handle = localStorage.getItem("kata_user_handle");
-		if (handle && handle.trim().length > 0 && handle !== "kata-hero") {
+		if (handle && handle.trim().length > 0) {
 			return handle.trim();
 		}
 		const stored = localStorage.getItem(USERNAME_KEY);
-		if (stored && stored.trim().length > 0 && stored !== "kata-hero") {
+		if (stored && stored.trim().length > 0) {
 			return stored.trim();
 		}
 		const deviceId = getOrCreateDeviceId();
@@ -112,6 +112,7 @@ export function getCommunityUsername(): string {
 		const defaultHandle = `kata-${generated.toLowerCase()}`;
 		localStorage.setItem("kata_user_handle", defaultHandle);
 		localStorage.setItem(USERNAME_KEY, defaultHandle);
+		void db.meta.put({ key: "userHandle", value: defaultHandle });
 		return defaultHandle;
 	} catch {
 		return "kata-hero";
@@ -125,6 +126,10 @@ export function setCommunityUsername(name: string): string {
 	try {
 		localStorage.setItem(USERNAME_KEY, cleaned);
 		localStorage.setItem("kata_user_handle", cleaned);
+		void db.meta.put({ key: "userHandle", value: cleaned });
+		window.dispatchEvent(
+			new CustomEvent("kata-username-changed", { detail: cleaned }),
+		);
 	} catch {
 		// ignore
 	}

@@ -9,6 +9,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { SharedDeckImportModal } from "../components/SharedDeckImportModal";
+import { syncCloudNow, useCloudSyncState } from "../hooks/useCloudSync";
 import { usePwaInstall } from "../hooks/usePwaInstall";
 import { useTheme } from "../hooks/useTheme";
 import { trackEvent } from "../lib/analytics";
@@ -16,7 +17,6 @@ import { downloadBackup, importBackup, isBackupFile } from "../lib/backup";
 import {
 	checkHandleAvailability,
 	claimUserHandle,
-	createCloudBackup,
 	getCloudBackupStatus,
 	getCurrentUserHandle,
 	getLastCloudBackupTime,
@@ -27,6 +27,7 @@ import {
 import { db } from "../lib/db";
 import { DEFAULT_DAILY_GOAL, ensureGameStats } from "../lib/game";
 import {
+	checkAndUpdateDeck,
 	getSyncState,
 	loadBundledSeed,
 	runSync,
@@ -51,6 +52,11 @@ function PengaturanPage() {
 
 	const [ttsOn, setTtsOn] = useState<boolean | null>(null);
 	const [syncState, setSyncState] = useState<SyncState>(getSyncState());
+	const [manualSyncMsg, setManualSyncMsg] = useState<{
+		type: "success" | "info" | "error";
+		text: string;
+	} | null>(null);
+	const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 	const [goalDraft, setGoalDraft] = useState<string | null>(null);
 	const [exported, setExported] = useState(false);
 	const [restored, setRestored] = useState(false);
@@ -79,8 +85,8 @@ function PengaturanPage() {
 	const [handleSuccessMsg, setHandleSuccessMsg] = useState<string | null>(null);
 
 	// Cloud Backup state
-	const [isCloudBackingUp, setIsCloudBackingUp] = useState(false);
-	const [cloudBackupSuccess, setCloudBackupSuccess] = useState(false);
+	const cloudSync = useCloudSyncState();
+	const [isManualSyncingCloud, setIsManualSyncingCloud] = useState(false);
 	const [lastCloudBackup, setLastCloudBackup] = useState<number | null>(null);
 
 	// Restore from Cloud Modal
@@ -119,9 +125,19 @@ function PengaturanPage() {
 			}
 		});
 
+		const onUsernameChanged = (e: Event) => {
+			const customEvent = e as CustomEvent<string>;
+			if (customEvent.detail) {
+				setUserHandle(customEvent.detail);
+				setHandleDraft(customEvent.detail);
+			}
+		};
+		window.addEventListener("kata-username-changed", onUsernameChanged);
+
 		return () => {
 			window.removeEventListener("online", up);
 			window.removeEventListener("offline", down);
+			window.removeEventListener("kata-username-changed", onUsernameChanged);
 			unsub();
 		};
 	}, []);
@@ -186,19 +202,22 @@ function PengaturanPage() {
 		}
 	};
 
-	const handleDoCloudBackup = async () => {
-		setIsCloudBackingUp(true);
+	const handleManualCloudSync = async () => {
+		if (!online) {
+			setBackupError(
+				"Perangkat sedang offline. Sambungkan ke internet untuk menyinkronkan.",
+			);
+			setTimeout(() => setBackupError(null), 4000);
+			return;
+		}
+		setIsManualSyncingCloud(true);
 		setBackupError(null);
-		const res = await createCloudBackup();
-		setIsCloudBackingUp(false);
-
-		if (res.success && res.backupAt) {
-			setLastCloudBackup(res.backupAt);
-			setCloudBackupSuccess(true);
-			trackEvent("cloud_backup_created");
-			setTimeout(() => setCloudBackupSuccess(false), 3000);
-		} else {
-			setBackupError(res.error || "Gagal mencadangkan ke cloud");
+		try {
+			await syncCloudNow();
+			const cached = getLastCloudBackupTime();
+			if (cached) setLastCloudBackup(cached);
+		} finally {
+			setIsManualSyncingCloud(false);
 		}
 	};
 
@@ -258,6 +277,55 @@ function PengaturanPage() {
 		}
 	};
 
+	const handleCheckUpdate = async () => {
+		if (!online) {
+			setManualSyncMsg({
+				type: "error",
+				text: "Perangkat sedang offline. Sambungkan ke internet untuk memeriksa pembaruan.",
+			});
+			setTimeout(() => setManualSyncMsg(null), 4000);
+			return;
+		}
+
+		setIsCheckingUpdate(true);
+		setManualSyncMsg(null);
+		try {
+			const result = await checkAndUpdateDeck();
+			if (result.status === "up-to-date") {
+				setManualSyncMsg({
+					type: "info",
+					text: "Semua kata sudah versi terbaru. Tidak ada kosakata baru.",
+				});
+			} else if (result.status === "updated") {
+				setManualSyncMsg({
+					type: "success",
+					text: `Berhasil menyinkronkan ${result.downloaded.toLocaleString("id-ID")} kata dari server!`,
+				});
+			} else if (result.status === "offline") {
+				setManualSyncMsg({
+					type: "error",
+					text: "Gagal terhubung: perangkat sedang offline.",
+				});
+			} else {
+				setManualSyncMsg({
+					type: "error",
+					text: `Pemeriksaan gagal: ${result.error}`,
+				});
+			}
+		} catch (err) {
+			setManualSyncMsg({
+				type: "error",
+				text:
+					err instanceof Error
+						? err.message
+						: "Terjadi kesalahan saat memeriksa pembaruan",
+			});
+		} finally {
+			setIsCheckingUpdate(false);
+			setTimeout(() => setManualSyncMsg(null), 5000);
+		}
+	};
+
 	const handleDownload = async () => {
 		try {
 			await downloadBackup();
@@ -298,6 +366,8 @@ function PengaturanPage() {
 		}
 	};
 
+	const effectiveLastSync = cloudSync.lastSyncAt ?? lastCloudBackup;
+
 	return (
 		<div className="py-6 space-y-4">
 			<section className="animate-fade-in-up">
@@ -325,13 +395,40 @@ function PengaturanPage() {
 								<h2 className="font-black text-ink text-base">
 									ID Pengguna & Cadangan Cloud
 								</h2>
-								<span className="px-2 py-0.5 rounded-pill bg-primary/15 text-primary text-[10px] font-mono font-bold">
-									Otomatis & Aman
-								</span>
+								{cloudSync.phase === "pulling" && (
+									<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[10px] font-mono font-bold animate-pulse border border-blue-500/30">
+										<Icon name="refresh" className="w-3 h-3 animate-spin" />
+										Menarik dari Cloud…
+									</span>
+								)}
+								{cloudSync.phase === "pushing" && (
+									<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-mono font-bold animate-pulse border border-amber-500/30">
+										<Icon name="sparkles" className="w-3 h-3 animate-spin" />
+										Menyimpan ke Cloud…
+									</span>
+								)}
+								{cloudSync.phase === "synced" && (
+									<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-success/15 text-success text-[10px] font-mono font-bold border border-success/30">
+										<Icon name="check" className="w-3 h-3" />
+										Tersinkron Real-time
+									</span>
+								)}
+								{cloudSync.phase === "error" && (
+									<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-danger/15 text-danger text-[10px] font-mono font-bold border border-danger/30">
+										<Icon name="alert-circle" className="w-3 h-3" />
+										Gagal Sinkron
+									</span>
+								)}
+								{cloudSync.phase === "idle" && (
+									<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill bg-primary/15 text-primary text-[10px] font-mono font-bold border border-primary/25">
+										<span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+										Sinkron 2 Arah Aktif
+									</span>
+								)}
 							</div>
 							<p className="text-xs text-muted mt-0.5">
-								ID unik kamu dipakai di Komunitas dan untuk memulihkan data saat
-								pindah perangkat.
+								ID unik kamu dipakai di Komunitas dan untuk sinkronisasi
+								otomatis antarperangkat secara instan.
 							</p>
 						</div>
 					</div>
@@ -470,24 +567,49 @@ function PengaturanPage() {
 						</p>
 					)}
 
-					{/* Action Buttons: Cadangkan, Unduh Teman, & Pulihkan */}
+					{/* Action Buttons: Sinkronkan Sekarang, Unduh Teman, & Pulihkan */}
 					<div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
 						<button
 							type="button"
-							onClick={() => void handleDoCloudBackup()}
-							disabled={isCloudBackingUp}
-							className="py-3 px-3 rounded-control bg-primary text-white font-bold text-xs hover:bg-primary-hover shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+							onClick={() => void handleManualCloudSync()}
+							disabled={
+								isManualSyncingCloud ||
+								cloudSync.phase === "pulling" ||
+								cloudSync.phase === "pushing"
+							}
+							className="py-3 px-3 rounded-control bg-primary text-white font-bold text-xs hover:bg-primary-hover shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform disabled:opacity-75 cursor-pointer"
 						>
-							<Icon name="sparkles" className="w-4 h-4" />
+							<Icon
+								name={
+									isManualSyncingCloud ||
+									cloudSync.phase === "pulling" ||
+									cloudSync.phase === "pushing"
+										? "refresh"
+										: "sparkles"
+								}
+								className={`w-4 h-4 ${
+									isManualSyncingCloud ||
+									cloudSync.phase === "pulling" ||
+									cloudSync.phase === "pushing"
+										? "animate-spin"
+										: ""
+								}`}
+							/>
 							<span>
-								{isCloudBackingUp ? "Mencadangkan…" : "Cadangkan ke Cloud"}
+								{cloudSync.phase === "pulling"
+									? "Menarik Data…"
+									: cloudSync.phase === "pushing"
+										? "Menyimpan…"
+										: isManualSyncingCloud
+											? "Menyinkronkan…"
+											: "Sinkronkan Sekarang"}
 							</span>
 						</button>
 
 						<button
 							type="button"
 							onClick={() => setIsImportModalOpen(true)}
-							className="py-3 px-3 rounded-control bg-surface border border-edge text-ink font-bold text-xs hover:bg-surface-2 hover:border-primary/40 shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+							className="py-3 px-3 rounded-control bg-surface border border-edge text-ink font-bold text-xs hover:bg-surface-2 hover:border-primary/40 shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform cursor-pointer"
 						>
 							<Icon name="download" className="w-4 h-4 text-primary" />
 							<span>Unduh Kartu Teman</span>
@@ -496,7 +618,7 @@ function PengaturanPage() {
 						<button
 							type="button"
 							onClick={() => setIsRestoreModalOpen(true)}
-							className="py-3 px-3 rounded-control bg-surface border border-edge text-ink font-bold text-xs hover:bg-surface-2 hover:border-primary/40 shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+							className="py-3 px-3 rounded-control bg-surface border border-edge text-ink font-bold text-xs hover:bg-surface-2 hover:border-primary/40 shadow-xs flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform cursor-pointer"
 						>
 							<Icon name="refresh" className="w-4 h-4 text-primary" />
 							<span>Pindah Device</span>
@@ -504,16 +626,39 @@ function PengaturanPage() {
 					</div>
 
 					{/* Metadata Info */}
-					<div className="flex items-center justify-between text-[11px] text-muted font-mono pt-1 px-1">
-						<span>
-							Status:{" "}
-							{lastCloudBackup
-								? `Terakhir dicadangkan ${new Date(lastCloudBackup).toLocaleString("id-ID")}`
-								: "Belum pernah dicadangkan ke cloud"}
-						</span>
-						{cloudBackupSuccess && (
+					<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-muted font-mono pt-1 px-1">
+						<div className="flex items-center gap-2">
+							<span
+								className={`w-2 h-2 rounded-full shrink-0 ${
+									cloudSync.phase === "error"
+										? "bg-danger"
+										: cloudSync.phase === "pulling" ||
+												cloudSync.phase === "pushing"
+											? "bg-amber-500 animate-pulse"
+											: "bg-success"
+								}`}
+							/>
+							<span>
+								Status:{" "}
+								{cloudSync.phase === "pulling"
+									? "Memeriksa dan menarik data terbaru…"
+									: cloudSync.phase === "pushing"
+										? "Mengunggah pembaruan lokal ke cloud…"
+										: effectiveLastSync
+											? `Terakhir disinkronkan ${new Date(
+													effectiveLastSync,
+												).toLocaleString("id-ID")}`
+											: "Belum pernah disinkronkan"}
+							</span>
+						</div>
+						{cloudSync.phase === "error" && cloudSync.error && (
+							<span className="text-danger font-semibold">
+								✗ {cloudSync.error}
+							</span>
+						)}
+						{cloudSync.phase === "synced" && (
 							<span className="text-success font-bold">
-								✓ Berhasil dicadangkan!
+								✓ Berhasil disinkronkan!
 							</span>
 						)}
 					</div>
@@ -714,8 +859,8 @@ function PengaturanPage() {
 				{/* Column 2: Sinkronisasi & Data */}
 				<div className="space-y-4">
 					{/* ===== Deck & unduhan ===== */}
-					<section className="rounded-card bg-surface border border-edge p-5 shadow-sm hover-lift animate-fade-in-up stagger-2">
-						<div className="flex items-center gap-3.5 mb-3">
+					<section className="rounded-card bg-surface border border-edge p-5 shadow-sm hover-lift animate-fade-in-up stagger-2 space-y-3.5">
+						<div className="flex items-center gap-3.5">
 							<span className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
 								<Icon name="download" className="w-5 h-5" />
 							</span>
@@ -736,24 +881,70 @@ function PengaturanPage() {
 								)}
 							</div>
 						</div>
-						<button
-							type="button"
-							onClick={() => void redownload()}
-							disabled={isSyncing}
-							className="w-full px-4 py-3 bg-primary text-white font-bold rounded-control active:scale-[0.98] transition-transform hover:bg-primary-hover disabled:opacity-50 text-sm shadow-sm"
-						>
-							{isSyncing
-								? `Menyiapkan… ${syncState.downloaded}${syncState.total > 0 ? `/${syncState.total}` : ""}`
-								: online
-									? "Unduh Ulang Semua Kata"
-									: "Muat Ulang Kosakata Lokal"}
-						</button>
-						{!online && (
-							<p className="text-xs text-muted mt-2">
-								Sedang offline — tombol di atas akan memuat ulang dari seed
-								bawaan aplikasi.
-							</p>
+
+						{/* Feedback status */}
+						{manualSyncMsg && (
+							<div
+								className={`p-3 rounded-xl text-xs font-semibold leading-relaxed flex items-center gap-2 animate-fade-in ${
+									manualSyncMsg.type === "success"
+										? "bg-success/10 border border-success/20 text-success"
+										: manualSyncMsg.type === "info"
+											? "bg-primary/10 border border-primary/20 text-primary"
+											: "bg-danger/10 border border-danger/20 text-danger"
+								}`}
+							>
+								<Icon
+									name={
+										manualSyncMsg.type === "success"
+											? "check-circle"
+											: manualSyncMsg.type === "info"
+												? "sparkles"
+												: "alert-circle"
+									}
+									className="w-4 h-4 shrink-0"
+								/>
+								<span>{manualSyncMsg.text}</span>
+							</div>
 						)}
+
+						{/* Action Buttons: 1. Periksa Pembaruan (Primary) 2. Unduh Ulang Penuh (Secondary) */}
+						<div className="space-y-2">
+							<button
+								type="button"
+								onClick={() => void handleCheckUpdate()}
+								disabled={isSyncing || isCheckingUpdate}
+								className="w-full px-4 py-3 bg-primary text-white font-bold rounded-control active:scale-[0.98] transition-transform hover:bg-primary-hover disabled:opacity-50 text-sm shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+							>
+								<Icon
+									name="refresh"
+									className={`w-4 h-4 ${isCheckingUpdate || isSyncing ? "animate-spin" : ""}`}
+								/>
+								<span>
+									{isCheckingUpdate || isSyncing
+										? `Memeriksa… ${syncState.downloaded > 0 ? `${syncState.downloaded}/${syncState.total}` : ""}`
+										: "Periksa Pembaruan Kosakata"}
+								</span>
+							</button>
+
+							<button
+								type="button"
+								onClick={() => void redownload()}
+								disabled={isSyncing || isCheckingUpdate}
+								className="w-full px-4 py-2.5 bg-surface-2 border border-edge text-ink font-semibold rounded-control active:scale-[0.98] transition-transform hover:border-primary/40 disabled:opacity-50 text-xs shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+							>
+								<Icon name="download" className="w-3.5 h-3.5 text-muted" />
+								<span>
+									{online
+										? "Unduh Ulang Semua Kata (Paksa)"
+										: "Muat Ulang Kosakata Lokal"}
+								</span>
+							</button>
+						</div>
+
+						<p className="text-[11px] text-muted leading-relaxed">
+							💡 Kosakata tersimpan offline di perangkat. Cukup periksa
+							pembaruan sesekali jika ingin mendapatkan kartu baru.
+						</p>
 					</section>
 
 					{/* ===== Cadangkan & Pulihkan File Lokal ===== */}

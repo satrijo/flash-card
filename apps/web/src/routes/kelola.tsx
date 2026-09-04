@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { BulkAddCardsModal } from "../components/BulkAddCardsModal";
 import { Icon } from "../components/Icon";
 import { SharedDeckImportModal } from "../components/SharedDeckImportModal";
+import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { trackEvent } from "../lib/analytics";
 import { BAND_ORDER, getBandMeta, parseBackContent } from "../lib/bands";
 import { db, type LocalCard } from "../lib/db";
@@ -159,6 +160,7 @@ function KelolaPage() {
 		await db.cards.delete(id);
 		setDeleteConfirmId(null);
 		if (lastCreatedId === id) setLastCreatedId(null);
+		scheduleCloudPush(4000);
 	};
 
 	// Reset memori kartu ke status baru (state: 0)
@@ -176,6 +178,7 @@ function KelolaPage() {
 			lapses: 0,
 			last_review: undefined,
 		});
+		scheduleCloudPush(4000);
 	};
 
 	const totalCount = cards?.length ?? 0;
@@ -796,6 +799,7 @@ function CardFormModal({
 			});
 			trackEvent("card_updated", { category: finalCategory });
 			onSaved?.(initialCard.id, finalCategory);
+			scheduleCloudPush(4000);
 			onClose();
 		} else {
 			const emptyCard = createEmptyCard(now);
@@ -817,6 +821,7 @@ function CardFormModal({
 			await db.cards.add(newCard);
 			trackEvent("card_created", { category: finalCategory });
 			onSaved?.(newCardId, finalCategory);
+			scheduleCloudPush(4000);
 
 			if (addAnother) {
 				setFront("");

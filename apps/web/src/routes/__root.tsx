@@ -18,6 +18,7 @@ import { Icon } from "../components/Icon";
 import { InstallOverlay } from "../components/InstallOverlay";
 import { SyncGate } from "../components/SyncGate";
 import { useAutoSync } from "../hooks/useAutoSync";
+import { useCloudSync } from "../hooks/useCloudSync";
 import { useGlobalPresence } from "../hooks/useGlobalPresence";
 import { usePwaInstall } from "../hooks/usePwaInstall";
 import { useTheme } from "../hooks/useTheme";
@@ -111,6 +112,7 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
 	useAutoSync();
+	useCloudSync();
 	useGlobalPresence();
 	const pwa = usePwaInstall();
 	// Buka speech engine di gesture pertama (kebijakan autoplay Chrome/iOS).

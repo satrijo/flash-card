@@ -1,49 +1,42 @@
-# Workflow: Auto-Sync Top-Down (Download-Only)
+# Workflow: Deck Sync (Initial Download + Manual On-Demand)
 
-Satu-satunya jalur data antara server dan device. Server = perpustakaan kartu read-only bersama; semua progress belajar hidup dan mati di IndexedDB perangkat masing-masing.
+Satu-satunya jalur data antara server dan device untuk kosakata kartu. Server = perpustakaan kartu read-only bersama; semua progress belajar hidup dan mati di IndexedDB perangkat masing-masing.
 
 ## Keputusan terkunci
-1. **Arah:** download-only. Tidak ada upload, tidak pernah ada. `syncQueue`, jalur upload `useSyncWorker`, dan endpoint `POST /api/sync` DIHAPUS dari web app.
-2. **Deteksi perubahan:** version-check. Endpoint ringan `GET /api/deck/version` mengembalikan `{ version: string, count: number }` di mana `version` = hash stabil dari seluruh isi tabel cards (dihitung server-side tiap request, tanpa state). Client bandingkan dengan `meta.deckVersion` lokal — sama = skip total; beda / belum ada = download.
-3. **Transfer:** batched download. Endpoint `GET /api/deck/cards?offset=N&limit=100`. Client loop sampai habis, tulis `bulkPut` ke Dexie per batch, update progress tiap batch.
-4. **UX:** hybrid gate.
-   - First visit (`meta.deckVersion` kosong): layar penuh "menyiapkan petualangan" dengan progress bar kartu-per-kartu ("523/2140"), app tidak bisa dipakai sebelum selesai. Bagian dari onboarding gamifikasi.
-   - Kunjungan berikutnya: version check senyap di background saat mount root. Beda versi → download senyap + toast kecil "Habitat baru tiba!" (tidak memblokir).
-   - Offline (`!navigator.onLine`): skip sync, app jalan normal penuh dari cache.
-5. **Multi-user tanpa akun:** tidak ada login, tidak ada identitas. Semua orang download deck yang sama; progress murni per-device.
+1. **Arah:** download-only. Tidak ada upload progres FSRS ke server (kecuali fitur eksplisit Cadangan Cloud pengguna).
+2. **Tanpa Polling Latar Belakang:** Tidak ada background polling berkala saat buka app, ganti tab (`visibilitychange`), atau online reconnect. Hal ini mencegah lonjakan kuota *row reads* Cloudflare D1.
+3. **Inisialisasi Pertama (Initial Sync):** Saat pengguna pertama kali membuka app dan IndexedDB masih kosong (`cardCount === 0` & `meta.deckVersion` belum ada), aplikasi mengunduh deck awal (atau memuat seed offline). Begitu selesai, auto-sync tidak lagi terpanggil.
+4. **Pembaruan Manual (On-Demand di Pengaturan):** Pembaruan kosakata dari D1 dilakukan secara manual melalui halaman `/pengaturan` -> "Koleksi Kosakata":
+   - **Periksa Pembaruan Kosakata:** Mengontak `GET /api/deck/version`. Jika versi sama → langsung beri tahu pengguna bahwa data sudah up-to-date. Jika versi beda → unduh kartu baru/terupdate secara batched.
+   - **Unduh Ulang Semua Kata (Paksa):** Mengunduh ulang seluruh kartu dari awal (`force: true`).
+5. **Transfer:** batched download via `GET /api/deck/cards?offset=N&limit=100`. Client loop sampai habis, tulis `bulkPut` ke Dexie per batch, update progress tiap batch dengan mempertahankan progres FSRS lokal.
 
-## Kontrak endpoint API (satu-satunya yang tersisa)
+## Kontrak endpoint API
 - `GET /api/deck/version` → `200 { version: string, count: number }`
-  - `version`: hash deterministik atas seluruh baris cards (misal FNV/djb2 atas id+front+back+category semua kartu, di-sort by id agar stabil). Boleh di-cache pendek di worker.
-  - `count`: jumlah kartu (untuk estimasi progress).
+  - `version`: hash FNV-1a atas seluruh baris cards (di-sort by id).
+  - `count`: jumlah kartu.
 - `GET /api/deck/cards?offset=<int>&limit=<int>` → `200 { cards: Card[], hasMore: boolean }`
   - Urut stabil by `id`. `limit` max 200.
-  - `Card` = 14 kolom schema D1 yang sudah ada (id, front, back, category, due, stability, difficulty, state, elapsed_days, scheduled_days, reps, lapses, last_review, createdAt) + category selalu dinormalisasi `"general"` fallback.
-- Endpoint lama `POST /api/cards` dan `POST /api/sync` dihapus.
 
-## Alur client
+## Alur Klien
+
 ```
-mount __root.tsx
-  ├─ navigator.onLine? ── no → done (offline mode)
-  ▼ yes
-GET /api/deck/version
-  ├─ version === meta.deckVersion → done
-  ▼ beda / pertama kali
-first visit? ── yes → FULLSCREEN GATE (progress bar)
-  │                        │
-  │  no                    ▼
-  ▼                   loop: GET /api/deck/cards?offset&limit=100
-BACKGROUND SILENT          → bulkPut batch → progress++ 
-  │                        → sampai hasMore=false
-  ▼                        → meta.deckVersion = version
-toast "Habitat baru!"      → gate tutup
+Akses Pertama Kali (cardCount === 0)
+  ├─ Onboarding Gate (SyncGate)
+  │    ├─ Online  ──> Download deck awal (/api/deck/cards) ──> Simpan deckVersion ──> Siap belajar
+  │    └─ Offline ──> Muat offline seed (/seed-deck.json) ──> Siap belajar
+
+Kunjungan Rutin Berikutnya (cardCount > 0)
+  └─ Buka langsung instan dari IndexedDB lokal (0 request ke server D1)
+
+Pembaruan Kosakata (Manual di /pengaturan)
+  └─ Klik "Periksa Pembaruan Kosakata"
+       ├─ Offline ──> Notifikasi sambungkan internet
+       ├─ Online  ──> GET /api/deck/version
+       │                ├─ Versi sama  ──> Notifikasi "Kosakata sudah versi terbaru"
+       │                └─ Versi beda  ──> Download batch kartu baru ──> Notifikasi sukses
 ```
 
-## Dexie tambahan
+## Dexie Tambahan
 Tabel `meta` (v4): `{ key: string, value: unknown }` — simpan `deckVersion`, `lastSyncAt`.
 
-## Definisi selesai
-- Buka web pertama kali → gate full-screen dengan angka progresi nyata → selesai → app terisi kartu.
-- Refresh kedua → tidak ada download kartu (hanya 1 request version check yang match).
-- Ubah kartu via MCP → buka app → download senyap + toast.
-- Mode pesawat → app tetap berfungsi 100% untuk review.

@@ -4,6 +4,7 @@
 import { createEmptyCard } from "@flashcard/shared";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
+import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { trackEvent } from "../lib/analytics";
 import { parseBackContent } from "../lib/bands";
 import { db } from "../lib/db";
@@ -53,6 +54,7 @@ export function SharedCardMessageBubble({
 			due: now,
 			createdAt: now,
 		});
+		scheduleCloudPush(2000);
 
 		setJustSaved(true);
 		trackEvent("shared_card_saved_from_chat", {
