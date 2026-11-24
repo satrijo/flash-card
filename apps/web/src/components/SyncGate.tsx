@@ -13,7 +13,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { trackEvent } from "../lib/analytics";
 import { importBackup, isBackupFile } from "../lib/backup";
-import { restoreCloudBackup } from "../lib/cloudBackup";
+import { restoreCloudBackup } from "../lib/cloud/download";
 import { db } from "../lib/db";
 import {
 	getSyncState,

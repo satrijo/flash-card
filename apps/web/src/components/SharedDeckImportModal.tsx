@@ -9,7 +9,7 @@ import {
 	mergeCardsFromCloudUser,
 	previewCloudDeck,
 	type SharedCategorySummary,
-} from "../lib/cloudBackup";
+} from "../lib/cloud/shared-deck";
 import { getAvatarGradient, getInitials } from "../lib/community";
 import { Icon } from "./Icon";
 

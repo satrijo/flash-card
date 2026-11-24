@@ -2,11 +2,10 @@
 // Hook orkestrasi sinkronisasi dua arah otomatis (Up & Down) dengan Cloudflare R2
 
 import { useEffect, useState } from "react";
-import {
-	createCloudBackup,
-	getCurrentUserHandle,
-	pullAndMergeCloudBackup,
-} from "../lib/cloudBackup";
+import { pullAndMergeCloudBackup } from "../lib/cloud/download";
+import { getCurrentUserHandle } from "../lib/cloud/handle";
+import { getLastCloudBackupTime } from "../lib/cloud/status";
+import { createCloudBackup } from "../lib/cloud/upload";
 
 export type CloudSyncPhase =
 	| "idle"
@@ -29,11 +28,7 @@ let isSyncing = false;
 const listeners = new Set<(state: CloudSyncState) => void>();
 
 function notify() {
-	const lastSync =
-		typeof window !== "undefined"
-			? Number(localStorage.getItem("kata_last_cloud_backup_time") || "0") ||
-				null
-			: null;
+	const lastSync = getLastCloudBackupTime();
 
 	const state: CloudSyncState = {
 		phase: syncPhase,
@@ -46,11 +41,7 @@ function notify() {
 }
 
 export function getCloudSyncState(): CloudSyncState {
-	const lastSync =
-		typeof window !== "undefined"
-			? Number(localStorage.getItem("kata_last_cloud_backup_time") || "0") ||
-				null
-			: null;
+	const lastSync = getLastCloudBackupTime();
 
 	return {
 		phase: syncPhase,
