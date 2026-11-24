@@ -7,7 +7,12 @@
 // yang mengurutkan via .orderBy(asc(cards.id)).
 
 import { describe, expect, it } from "vitest";
-import { deckVersionFromRows } from "./lib/deck-version";
+import {
+	deckVersionFromRows,
+	getCachedDeckVersion,
+	invalidateDeckVersionCache,
+	setCachedDeckVersion,
+} from "./lib/deck-version";
 
 type Row = { id: string; front: string; back: string; category: string };
 
@@ -44,5 +49,24 @@ describe("deckVersionFromRows", () => {
 
 	it("format: fnv1a- + 8 hex", () => {
 		expect(deckVersionFromRows([ONE])).toMatch(/^fnv1a-[0-9a-f]{8}$/);
+	});
+});
+
+describe("cache versi deck (lib/deck-version.ts)", () => {
+	it("awal null; set -> get mengembalikan nilai; invalidate -> null lagi", () => {
+		invalidateDeckVersionCache();
+		expect(getCachedDeckVersion()).toBeNull();
+		setCachedDeckVersion({
+			version: "fnv1a-2f5f5895",
+			count: 1,
+			expiresAt: Date.now() + 300_000,
+		});
+		expect(getCachedDeckVersion()).toEqual({
+			version: "fnv1a-2f5f5895",
+			count: 1,
+			expiresAt: expect.any(Number),
+		});
+		invalidateDeckVersionCache();
+		expect(getCachedDeckVersion()).toBeNull();
 	});
 });
