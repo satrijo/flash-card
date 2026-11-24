@@ -13,3 +13,34 @@ const params = generatorParameters({
 export const fsrsEngine = fsrs(params);
 // Ekspor juga tipe bawaan agar bisa diakses frontend & backend
 export { Rating, State, createEmptyCard };
+// Normalisasi kategori — satu sumber kebenaran untuk web, API, dan MCP.
+// Dulu tiap tempat menulis ulang pola yang sama, dan API/MCP lupa lowercase.
+export function normalizeCategory(value) {
+    const clean = (value ?? "").trim().toLowerCase();
+    return clean === "" ? "general" : clean;
+}
+// Nama rating (string, dari input user/API) -> enum Rating ts-fsrs.
+// Dulu API dan MCP stdio masing-masing punya salinan map yang sama.
+export const FSRS_RATINGS = {
+    again: Rating.Again,
+    hard: Rating.Hard,
+    good: Rating.Good,
+    easy: Rating.Easy,
+};
+// Hitung state kartu berikutnya setelah satu review.
+// Kartu asal tidak diubah — hasilnya objek baru.
+export function buildFsrsUpdate(card, rating, now) {
+    const next = fsrsEngine.repeat(card, now)[rating].card;
+    return {
+        due: next.due,
+        state: next.state,
+        stability: next.stability,
+        difficulty: next.difficulty,
+        elapsed_days: next.elapsed_days,
+        scheduled_days: next.scheduled_days,
+        learning_steps: next.learning_steps,
+        reps: next.reps,
+        lapses: next.lapses,
+        last_review: next.last_review,
+    };
+}

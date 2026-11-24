@@ -50,7 +50,9 @@ const getD1 = (c: { env: Bindings }) => c.env.flashcard_db ?? c.env.DB;
 
 // FNV-1a 32-bit atas seluruh isi tabel cards (di-sort by id supaya stabil).
 // Dipakai client sebagai version-check: sama = skip download.
-function deckVersionFromRows(
+// Diekspor supaya bisa diuji langsung (deck-version.test.ts); T3 memindahkan
+// fungsi ini ke src/lib/deck-version.ts tanpa mengubah perilaku.
+export function deckVersionFromRows(
   rows: { id: string; front: string; back: string; category: string }[],
 ): string {
   let hash = 0x811c9dc5;

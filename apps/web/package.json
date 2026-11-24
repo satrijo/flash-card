@@ -13,7 +13,8 @@
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run"
   },
   "dependencies": {
     "@flashcard/api": "workspace:*",
@@ -42,6 +43,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
-    "wrangler": "^4.70.0"
+    "wrangler": "^4.70.0",
+    "vitest": "^4.0.0"
   }
 }
