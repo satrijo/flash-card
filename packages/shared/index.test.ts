@@ -13,7 +13,9 @@ import {
 	State,
 	buildFsrsUpdate,
 	createEmptyCard,
+	isReservedHandle,
 	normalizeCategory,
+	normalizeUserHandle,
 	type FSRSCard,
 } from "./index.ts";
 
@@ -35,6 +37,46 @@ describe("normalizeCategory", () => {
 		expect(normalizeCategory("")).toBe("general");
 		expect(normalizeCategory("   ")).toBe("general");
 		expect(normalizeCategory(undefined)).toBe("general");
+	});
+});
+
+describe("normalizeUserHandle", () => {
+	it("lowercase + awalan kata-", () => {
+		expect(normalizeUserHandle("Satriyo")).toBe("kata-satriyo");
+		expect(normalizeUserHandle("kata-Admin")).toBe("kata-admin");
+		expect(normalizeUserHandle("  Hero  ")).toBe("kata-hero");
+	});
+
+	it("karakter selain huruf/angka/_/- jadi -, beruntun digabung", () => {
+		expect(normalizeUserHandle("Hello World!")).toBe("kata-hello-world-");
+	});
+
+	it("dipotong 30 karakter", () => {
+		expect(normalizeUserHandle("a".repeat(40))).toBe(`kata-${"a".repeat(25)}`);
+		expect(normalizeUserHandle("a".repeat(40)).length).toBe(30);
+	});
+
+	it("kosong jadi kata- (perilaku nyata, dikunci)", () => {
+		expect(normalizeUserHandle("")).toBe("kata-");
+	});
+});
+
+describe("isReservedHandle", () => {
+	it("handle sistem persis -> reserved", () => {
+		expect(isReservedHandle("kata-admin")).toBe(true);
+		expect(isReservedHandle("kata-bot")).toBe(true);
+	});
+
+	it("kata reserved tanpa awalan kata- -> reserved", () => {
+		expect(isReservedHandle("admin")).toBe(true);
+		expect(isReservedHandle("kata-admin-x")).toBe(true);
+		expect(isReservedHandle("kata-my-admin")).toBe(true);
+	});
+
+	it("handle biasa -> bukan reserved", () => {
+		expect(isReservedHandle("kata-hero")).toBe(false);
+		expect(isReservedHandle("kata-satriyo")).toBe(false);
+		expect(isReservedHandle("kata-administrator2")).toBe(false);
 	});
 });
 

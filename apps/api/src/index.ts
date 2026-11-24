@@ -16,11 +16,15 @@ import { drizzle } from "drizzle-orm/d1";
 import { cards } from "@flashcard/db";
 import { cors } from "hono/cors";
 import {
-  Rating,
+  FSRS_RATINGS,
+  buildFsrsUpdate,
   createEmptyCard,
-  fsrsEngine,
+  isReservedHandle,
+  normalizeCategory,
+  normalizeUserHandle,
   type FSRSCard,
 } from "@flashcard/shared";
+import { deckVersionFromRows } from "./lib/deck-version";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 
 // ---------------------------------------------------------------------------
@@ -47,27 +51,6 @@ app.use("/*", cors());
 // ===========================================================================
 
 const getD1 = (c: { env: Bindings }) => c.env.flashcard_db ?? c.env.DB;
-
-// FNV-1a 32-bit atas seluruh isi tabel cards (di-sort by id supaya stabil).
-// Dipakai client sebagai version-check: sama = skip download.
-// Diekspor supaya bisa diuji langsung (deck-version.test.ts); T3 memindahkan
-// fungsi ini ke src/lib/deck-version.ts tanpa mengubah perilaku.
-export function deckVersionFromRows(
-  rows: { id: string; front: string; back: string; category: string }[],
-): string {
-  let hash = 0x811c9dc5;
-  const step = (s: string) => {
-    for (let i = 0; i < s.length; i++) {
-      hash ^= s.charCodeAt(i);
-      hash = Math.imul(hash, 0x01000193) >>> 0;
-    }
-  };
-  for (const r of rows) {
-    step(`${r.id}\u0000${r.front}\u0000${r.back}\u0000${r.category}`);
-    step("\u0001"); // pemisah antar kartu
-  }
-  return `fnv1a-${hash.toString(16).padStart(8, "0")}`;
-}
 
 // ---------------------------------------------------------------------------
 // COMMUNITY CHAT STATE & WEBSOCKET BROADCAST
@@ -265,62 +248,6 @@ async function initCommunityD1(d1: D1Database): Promise<void> {
   } catch (e) {
     console.warn("D1 init table error:", e);
   }
-}
-
-function normalizeUserHandle(input: string): string {
-  let clean = String(input || "").trim().toLowerCase();
-  if (!clean.startsWith("kata-")) {
-    clean = `kata-${clean}`;
-  }
-  clean = clean.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-");
-  return clean.slice(0, 30);
-}
-
-const RESERVED_HANDLES = new Set([
-  "kata-admin",
-  "kata-administrator",
-  "kata-operator",
-  "kata-op",
-  "kata-mod",
-  "kata-moderator",
-  "kata-staff",
-  "kata-system",
-  "kata-support",
-  "kata-official",
-  "kata-katabot",
-  "kata-bot",
-  "kata-root",
-  "kata-superuser",
-  "kata-ai",
-  "kata-tutor",
-  "kata-help",
-  "kata-developer",
-  "kata-owner",
-  "kata-founder",
-  "kata-security",
-]);
-
-function isReservedHandle(handle: string): boolean {
-  const norm = handle.toLowerCase().trim();
-  if (RESERVED_HANDLES.has(norm)) return true;
-  const raw = norm.replace(/^kata-/, "");
-  const reservedWords = [
-    "admin",
-    "administrator",
-    "operator",
-    "moderator",
-    "staff",
-    "system",
-    "support",
-    "official",
-    "katabot",
-    "superuser",
-    "root",
-    "security",
-  ];
-  return reservedWords.some(
-    (word) => raw === word || raw.startsWith(`${word}-`) || raw.endsWith(`-${word}`)
-  );
 }
 
 function verifyAdminKey(providedKey?: string, envKey?: string): boolean {
@@ -1239,7 +1166,7 @@ function buildInsertCard(
     id: crypto.randomUUID(),
     front: front.trim(),
     back: back.trim(),
-    category: category?.trim() || "general",
+    category: normalizeCategory(category),
     due: now,
     stability: emptyCard.stability,
     difficulty: emptyCard.difficulty,
@@ -1277,7 +1204,7 @@ async function handleUpdateCard(
   if (args.front !== undefined) setData.front = args.front.trim();
   if (args.back !== undefined) setData.back = args.back.trim();
   if (args.category !== undefined)
-    setData.category = args.category.trim() || "general";
+    setData.category = normalizeCategory(args.category);
   if (args.due !== undefined) {
     const due = new Date(args.due);
     if (Number.isNaN(due.getTime()))
@@ -1438,13 +1365,6 @@ async function handleSearchCards(
   return { query: args.query, cards: rows, count: rows.length };
 }
 
-const RATING_MAP = {
-  again: Rating.Again,
-  hard: Rating.Hard,
-  good: Rating.Good,
-  easy: Rating.Easy,
-} as const;
-
 async function handleReviewCard(
   args: z.infer<typeof ReviewCardArgsSchema>,
   db: D1Db,
@@ -1456,7 +1376,7 @@ async function handleReviewCard(
     .get();
   if (!existing) throw new Error(`Card not found: ${args.id}`);
 
-  // D1 returns Date objects for timestamp columns; fsrsEngine expects Date-compatible values
+  // D1 returns Date objects for timestamp columns; buildFsrsUpdate expects Date-compatible values
   const card: FSRSCard = {
     due: existing.due,
     stability: existing.stability,
@@ -1469,22 +1389,9 @@ async function handleReviewCard(
     state: existing.state as FSRSCard["state"],
     last_review: existing.last_review ?? undefined,
   };
-  const nextState = fsrsEngine.repeat(card, new Date())[
-    RATING_MAP[args.rating]
-  ].card;
+  const nextState = buildFsrsUpdate(card, FSRS_RATINGS[args.rating], new Date());
 
-  const setData: Partial<typeof cards.$inferInsert> = {
-    due: nextState.due,
-    stability: nextState.stability,
-    difficulty: nextState.difficulty,
-    state: nextState.state,
-    elapsed_days: nextState.elapsed_days,
-    scheduled_days: nextState.scheduled_days,
-    learning_steps: nextState.learning_steps,
-    reps: nextState.reps,
-    lapses: nextState.lapses,
-    last_review: nextState.last_review,
-  };
+  const setData: Partial<typeof cards.$inferInsert> = { ...nextState };
   await db.update(cards).set(setData).where(eq(cards.id, args.id)).run();
 
   return {

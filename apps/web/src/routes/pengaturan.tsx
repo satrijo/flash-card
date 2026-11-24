@@ -4,6 +4,7 @@
  * ID Akun Unik, Cadangan Cloud (R2+D1), dan cadangan lokal JSON.
  */
 
+import { isReservedHandle, normalizeUserHandle } from "@flashcard/shared";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
@@ -20,8 +21,6 @@ import {
 	getCloudBackupStatus,
 	getCurrentUserHandle,
 	getLastCloudBackupTime,
-	isReservedHandle,
-	normalizeUserHandle,
 	restoreCloudBackup,
 } from "../lib/cloudBackup";
 import { db } from "../lib/db";

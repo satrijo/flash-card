@@ -1,7 +1,12 @@
 // apps/web/src/lib/cloudBackup.ts
 // Manajemen ID Unik Pengguna (kata-<nama>) & Sinkronisasi Cadangan Cloud (Cloudflare R2 + D1)
 
-import { createEmptyCard } from "@flashcard/shared";
+import {
+	createEmptyCard,
+	isReservedHandle,
+	normalizeCategory,
+	normalizeUserHandle,
+} from "@flashcard/shared";
 import {
 	type BackupFile,
 	buildBackup,
@@ -24,17 +29,6 @@ import {
 const STORAGE_KEY_HANDLE = "kata_user_handle";
 const STORAGE_KEY_LAST_BACKUP = "kata_last_cloud_backup_time";
 
-export function normalizeUserHandle(input: string): string {
-	let clean = String(input || "")
-		.trim()
-		.toLowerCase();
-	if (!clean.startsWith("kata-")) {
-		clean = `kata-${clean}`;
-	}
-	clean = clean.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-");
-	return clean.slice(0, 30);
-}
-
 export function getCurrentUserHandle(): string {
 	if (typeof window === "undefined") return "kata-hero";
 	const saved = localStorage.getItem(STORAGE_KEY_HANDLE);
@@ -56,54 +50,6 @@ export function setCurrentUserHandle(handle: string): void {
 	localStorage.setItem(STORAGE_KEY_HANDLE, norm);
 	// Sinkronkan juga username komunitas agar sama persis
 	setCommunityUsername(norm);
-}
-
-export const RESERVED_HANDLES = new Set([
-	"kata-admin",
-	"kata-administrator",
-	"kata-operator",
-	"kata-op",
-	"kata-mod",
-	"kata-moderator",
-	"kata-staff",
-	"kata-system",
-	"kata-support",
-	"kata-official",
-	"kata-katabot",
-	"kata-bot",
-	"kata-root",
-	"kata-superuser",
-	"kata-ai",
-	"kata-tutor",
-	"kata-help",
-	"kata-developer",
-	"kata-owner",
-	"kata-founder",
-	"kata-security",
-]);
-
-export function isReservedHandle(handle: string): boolean {
-	const norm = handle.toLowerCase().trim();
-	if (RESERVED_HANDLES.has(norm)) return true;
-	const raw = norm.replace(/^kata-/, "");
-	const reservedWords = [
-		"admin",
-		"administrator",
-		"operator",
-		"moderator",
-		"staff",
-		"system",
-		"support",
-		"official",
-		"katabot",
-		"superuser",
-		"root",
-		"security",
-	];
-	return reservedWords.some(
-		(word) =>
-			raw === word || raw.startsWith(`${word}-`) || raw.endsWith(`-${word}`),
-	);
 }
 
 export function getLastCloudBackupTime(): number | null {
@@ -767,7 +713,7 @@ export async function previewCloudDeck(rawHandle: string): Promise<{
 		let totalExisting = 0;
 
 		for (const c of incomingCards) {
-			const cat = (c.category || "general").trim().toLowerCase();
+			const cat = normalizeCategory(c.category);
 			const isExisting = localWords.has(c.front.trim().toLowerCase());
 
 			let current = catMap.get(cat);
@@ -806,7 +752,7 @@ export async function previewCloudDeck(rawHandle: string): Promise<{
 			sampleCards: incomingCards.slice(0, 6).map((c) => ({
 				front: c.front,
 				back: c.back,
-				category: (c.category || "general").trim().toLowerCase(),
+				category: normalizeCategory(c.category),
 			})),
 			backupAt: result.backupAt,
 		};
@@ -879,7 +825,7 @@ export async function mergeCardsFromCloudUser(
 		for (const ec of existingLocal) {
 			existingWords.add(ec.front.trim().toLowerCase());
 			existingIds.add(ec.id);
-			existingCats.add((ec.category || "general").trim().toLowerCase());
+			existingCats.add(normalizeCategory(ec.category));
 		}
 
 		const now = new Date();
@@ -889,7 +835,7 @@ export async function mergeCardsFromCloudUser(
 
 		const targetCategories =
 			selectedCategories && selectedCategories.length > 0
-				? new Set(selectedCategories.map((c) => c.trim().toLowerCase()))
+				? new Set(selectedCategories.map((c) => normalizeCategory(c)))
 				: null;
 
 		for (const ic of incomingCards) {
@@ -898,7 +844,7 @@ export async function mergeCardsFromCloudUser(
 				.toLowerCase();
 			if (!frontKey) continue;
 
-			const finalCat = (ic.category || "general").trim().toLowerCase();
+			const finalCat = normalizeCategory(ic.category);
 
 			// Jika user memilih filter kategori tertentu
 			if (targetCategories && !targetCategories.has(finalCat)) {

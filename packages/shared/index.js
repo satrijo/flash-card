@@ -19,6 +19,62 @@ export function normalizeCategory(value) {
     const clean = (value ?? "").trim().toLowerCase();
     return clean === "" ? "general" : clean;
 }
+// Normalisasi handle pengguna ("Satriyo" -> "kata-satriyo") — dipakai API
+// (claim/check handle, komunitas) dan web (cloudBackup). Dulu ada salinan
+// identik di kedua tempat.
+export function normalizeUserHandle(input) {
+    let clean = String(input || "").trim().toLowerCase();
+    if (!clean.startsWith("kata-")) {
+        clean = `kata-${clean}`;
+    }
+    clean = clean.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-");
+    return clean.slice(0, 30);
+}
+// Handle yang tidak boleh dipakai pengguna (peran sistem / resmi).
+export const RESERVED_HANDLES = new Set([
+    "kata-admin",
+    "kata-administrator",
+    "kata-operator",
+    "kata-op",
+    "kata-mod",
+    "kata-moderator",
+    "kata-staff",
+    "kata-system",
+    "kata-support",
+    "kata-official",
+    "kata-katabot",
+    "kata-bot",
+    "kata-root",
+    "kata-superuser",
+    "kata-ai",
+    "kata-tutor",
+    "kata-help",
+    "kata-developer",
+    "kata-owner",
+    "kata-founder",
+    "kata-security",
+]);
+export function isReservedHandle(handle) {
+    const norm = handle.toLowerCase().trim();
+    if (RESERVED_HANDLES.has(norm))
+        return true;
+    const raw = norm.replace(/^kata-/, "");
+    const reservedWords = [
+        "admin",
+        "administrator",
+        "operator",
+        "moderator",
+        "staff",
+        "system",
+        "support",
+        "official",
+        "katabot",
+        "superuser",
+        "root",
+        "security",
+    ];
+    return reservedWords.some((word) => raw === word || raw.startsWith(`${word}-`) || raw.endsWith(`-${word}`));
+}
 // Nama rating (string, dari input user/API) -> enum Rating ts-fsrs.
 // Dulu API dan MCP stdio masing-masing punya salinan map yang sama.
 export const FSRS_RATINGS = {

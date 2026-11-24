@@ -1,7 +1,7 @@
 // apps/web/src/components/SharedCardMessageBubble.tsx
 // Kartu lampiran flashcard interaktif dan estetik di dalam obrolan komunitas (Full Dual-Theme Light/Dark Support)
 
-import { createEmptyCard } from "@flashcard/shared";
+import { createEmptyCard, normalizeCategory } from "@flashcard/shared";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { scheduleCloudPush } from "../hooks/useCloudSync";
@@ -30,7 +30,7 @@ export function SharedCardMessageBubble({
 }: SharedCardMessageBubbleProps) {
 	const [justSaved, setJustSaved] = useState(false);
 	const parsed = parseBackContent(cardRef.back);
-	const category = (cardRef.category || "general").trim().toLowerCase();
+	const category = normalizeCategory(cardRef.category);
 
 	// Periksa apakah kartu ini sudah ada di database lokal pengguna
 	const isAlreadyInDeck = useLiveQuery(async () => {

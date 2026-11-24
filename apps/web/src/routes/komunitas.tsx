@@ -7,17 +7,14 @@
  * 4. Tab AI English Tutor & Roleplay Chat (Roadmap).
  */
 
+import { isReservedHandle, normalizeUserHandle } from "@flashcard/shared";
 import { createFileRoute } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { SharedCardMessageBubble } from "../components/SharedCardMessageBubble";
 import { SharedDeckImportModal } from "../components/SharedDeckImportModal";
-import {
-	claimUserHandle,
-	isReservedHandle,
-	normalizeUserHandle,
-} from "../lib/cloudBackup";
+import { claimUserHandle } from "../lib/cloudBackup";
 import {
 	type ActiveLearner,
 	fetchCommunityMessagesRest,

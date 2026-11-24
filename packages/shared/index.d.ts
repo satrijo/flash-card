@@ -2,6 +2,9 @@ import { Rating, State, type Card as FSRSCard, createEmptyCard } from "ts-fsrs";
 export declare const fsrsEngine: import("ts-fsrs").FSRS;
 export { Rating, State, type FSRSCard, createEmptyCard };
 export declare function normalizeCategory(value: string | undefined): string;
+export declare function normalizeUserHandle(input: string): string;
+export declare const RESERVED_HANDLES: Set<string>;
+export declare function isReservedHandle(handle: string): boolean;
 export declare const FSRS_RATINGS: {
     readonly again: Rating.Again;
     readonly hard: Rating.Hard;

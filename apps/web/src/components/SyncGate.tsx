@@ -8,11 +8,12 @@
  * Jika ada kartu di database lokal → tidak pernah memblokir layar.
  */
 
+import { normalizeUserHandle } from "@flashcard/shared";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { trackEvent } from "../lib/analytics";
 import { importBackup, isBackupFile } from "../lib/backup";
-import { normalizeUserHandle, restoreCloudBackup } from "../lib/cloudBackup";
+import { restoreCloudBackup } from "../lib/cloudBackup";
 import { db } from "../lib/db";
 import {
 	getSyncState,

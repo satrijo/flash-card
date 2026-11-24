@@ -7,7 +7,7 @@
 // yang mengurutkan via .orderBy(asc(cards.id)).
 
 import { describe, expect, it } from "vitest";
-import { deckVersionFromRows } from "./index";
+import { deckVersionFromRows } from "./lib/deck-version";
 
 type Row = { id: string; front: string; back: string; category: string };
 

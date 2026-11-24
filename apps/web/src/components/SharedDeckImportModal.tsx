@@ -2,11 +2,11 @@
 // Modal interaktif untuk preview & impor non-destruktif koleksi kartu dari pengguna lain (R2 / D1)
 // Dilengkapi pemilih multi-kategori agar pengguna hanya mengimpor kategori yang diinginkan (Anti-Bloated)
 
+import { normalizeUserHandle } from "@flashcard/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { trackEvent } from "../lib/analytics";
 import {
 	mergeCardsFromCloudUser,
-	normalizeUserHandle,
 	previewCloudDeck,
 	type SharedCategorySummary,
 } from "../lib/cloudBackup";

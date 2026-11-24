@@ -29,7 +29,13 @@ import {
 } from "drizzle-orm";
 import * as schema from "@flashcard/db";
 import { cards } from "@flashcard/db";
-import { Rating, createEmptyCard, fsrsEngine, type FSRSCard } from "@flashcard/shared";
+import {
+  FSRS_RATINGS,
+  buildFsrsUpdate,
+  createEmptyCard,
+  normalizeCategory,
+  type FSRSCard,
+} from "@flashcard/shared";
 
 // ---------------------------------------------------------------------------
 // Koneksi database (better-sqlite3)
@@ -329,7 +335,7 @@ function buildInsertCard(
     id: crypto.randomUUID(),
     front: front.trim(),
     back: back.trim(),
-    category: category?.trim() || "general",
+    category: normalizeCategory(category),
     due: now,
     stability: emptyCard.stability,
     difficulty: emptyCard.difficulty,
@@ -357,7 +363,7 @@ function updateCard(args: z.infer<typeof UpdateCardArgsSchema>) {
   const setData: Partial<typeof cards.$inferInsert> = {};
   if (args.front !== undefined) setData.front = args.front.trim();
   if (args.back !== undefined) setData.back = args.back.trim();
-  if (args.category !== undefined) setData.category = args.category.trim() || "general";
+  if (args.category !== undefined) setData.category = normalizeCategory(args.category);
   if (args.due !== undefined) {
     const due = new Date(args.due);
     if (Number.isNaN(due.getTime())) throw new Error(`Invalid due date: ${args.due}`);
@@ -474,13 +480,6 @@ function searchCards(args: z.infer<typeof SearchCardsArgsSchema>) {
   return { query: args.query, cards: rows, count: rows.length };
 }
 
-const RATING_MAP = {
-  again: Rating.Again,
-  hard: Rating.Hard,
-  good: Rating.Good,
-  easy: Rating.Easy,
-} as const;
-
 function reviewCard(args: z.infer<typeof ReviewCardArgsSchema>) {
   const db = getDb();
   const existing = db.select().from(cards).where(eq(cards.id, args.id)).get();
@@ -498,20 +497,9 @@ function reviewCard(args: z.infer<typeof ReviewCardArgsSchema>) {
     state: existing.state as FSRSCard["state"],
     last_review: existing.last_review ?? undefined,
   };
-  const nextState = fsrsEngine.repeat(card, new Date())[RATING_MAP[args.rating]].card;
+  const nextState = buildFsrsUpdate(card, FSRS_RATINGS[args.rating], new Date());
 
-  const setData: Partial<typeof cards.$inferInsert> = {
-    due: nextState.due,
-    stability: nextState.stability,
-    difficulty: nextState.difficulty,
-    state: nextState.state,
-    elapsed_days: nextState.elapsed_days,
-    scheduled_days: nextState.scheduled_days,
-    learning_steps: nextState.learning_steps,
-    reps: nextState.reps,
-    lapses: nextState.lapses,
-    last_review: nextState.last_review,
-  };
+  const setData: Partial<typeof cards.$inferInsert> = { ...nextState };
   db.update(cards).set(setData).where(eq(cards.id, args.id)).run();
 
   return { reviewed: args.id, rating: args.rating, nextDue: nextState.due, nextState };

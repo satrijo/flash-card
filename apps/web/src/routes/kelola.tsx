@@ -5,7 +5,7 @@
  * filter kategori pure-dynamic, sorting cerdas (Terbaru/A-Z/SRS), dan live search.
  */
 
-import { createEmptyCard } from "@flashcard/shared";
+import { createEmptyCard, normalizeCategory } from "@flashcard/shared";
 import { createFileRoute } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useState } from "react";
@@ -63,7 +63,7 @@ function KelolaPage() {
 
 		const set = new Set<string>();
 		for (const c of cards) {
-			const cat = (c.category || "general").trim().toLowerCase();
+			const cat = normalizeCategory(c.category);
 			if (cat) {
 				set.add(cat);
 				counts[cat] = (counts[cat] || 0) + 1;
@@ -95,7 +95,7 @@ function KelolaPage() {
 			.filter((c) => {
 				// Category filter
 				if (selectedCategory !== "all") {
-					const cat = (c.category || "general").trim().toLowerCase();
+					const cat = normalizeCategory(c.category);
 					if (cat !== selectedCategory) {
 						return false;
 					}
@@ -117,7 +117,7 @@ function KelolaPage() {
 
 				// Search query
 				if (q.length > 0) {
-					const cat = (c.category || "general").toLowerCase();
+					const cat = normalizeCategory(c.category);
 					return (
 						c.front.toLowerCase().includes(q) ||
 						c.back.toLowerCase().includes(q) ||

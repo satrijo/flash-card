@@ -9,7 +9,7 @@
  *                                     senyap + toast jika kunjungan berikutnya)
  */
 
-import { createEmptyCard } from "@flashcard/shared";
+import { createEmptyCard, normalizeCategory } from "@flashcard/shared";
 import { db, type LocalCard } from "./db";
 
 export const SYNC_BATCH_SIZE = 100;
@@ -97,7 +97,7 @@ export async function loadBundledSeed(): Promise<boolean> {
 				id: crypto.randomUUID(),
 				front: String(front).trim(),
 				back: String(back).trim(),
-				category: String(category).trim() || "general",
+				category: normalizeCategory(String(category)),
 				due: now,
 				stability: empty.stability,
 				difficulty: empty.difficulty,

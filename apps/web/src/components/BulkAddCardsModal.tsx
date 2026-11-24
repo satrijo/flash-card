@@ -3,7 +3,7 @@
 // Mengikuti standar format persis seperti packages/db/seed/inggris-easy.csv:
 // "front", "back", "category" (kategori selalu di akhir, contoh kalimat di dalam back via Ex: ... — ...)
 
-import { createEmptyCard } from "@flashcard/shared";
+import { createEmptyCard, normalizeCategory } from "@flashcard/shared";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useRef, useState } from "react";
 import { scheduleCloudPush } from "../hooks/useCloudSync";
@@ -147,11 +147,9 @@ export function BulkAddCardsModal({
 			// Kategori SELALU di akhir (mengikuti seed dan 3-column / 5-column standard)
 			if (parts.length >= 3) {
 				// Standar seed: front = parts[0], category = parts[parts.length - 1], back = sisanya
-				category = (
-					parts[parts.length - 1]?.trim() ||
-					defaultCategory ||
-					"inggris-easy"
-				).toLowerCase();
+				category = normalizeCategory(
+					parts[parts.length - 1]?.trim() || defaultCategory || "inggris-easy",
+				);
 
 				if (parts.length === 3) {
 					back = parts[1]?.trim() ?? "";
@@ -172,10 +170,10 @@ export function BulkAddCardsModal({
 			} else if (parts.length === 2) {
 				// front, back (kategori pakai defaultCategory)
 				back = parts[1]?.trim() ?? "";
-				category = (defaultCategory || "inggris-easy").trim().toLowerCase();
+				category = normalizeCategory(defaultCategory || "inggris-easy");
 			} else {
 				back = "";
-				category = (defaultCategory || "inggris-easy").trim().toLowerCase();
+				category = normalizeCategory(defaultCategory || "inggris-easy");
 			}
 
 			const key = front.toLowerCase();
@@ -314,7 +312,7 @@ export function BulkAddCardsModal({
 				id: crypto.randomUUID(),
 				front: r.front.trim(),
 				back: r.back.trim(),
-				category: r.category.trim().toLowerCase(),
+				category: normalizeCategory(r.category),
 				due: now,
 				createdAt: now,
 			});

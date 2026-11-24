@@ -5,7 +5,12 @@
  * kartu lapang bebas redundansi, serta 4 tombol ulasan ergonomis FSRS di luar kartu.
  */
 
-import { fsrsEngine, Rating } from "@flashcard/shared";
+import {
+	buildFsrsUpdate,
+	type FsrsReviewRating,
+	fsrsEngine,
+	Rating,
+} from "@flashcard/shared";
 import { useCallback, useEffect, useState } from "react";
 import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { getBandMeta, parseBackContent } from "../lib/bands";
@@ -115,24 +120,15 @@ export function EkspedisiCard({
 			setIsSubmitting(true);
 
 			const now = new Date();
-			const schedulingRecords = fsrsEngine.repeat(card, now);
-			const nextCardState =
-				schedulingRecords[rating as Exclude<Rating, Rating.Manual>].card;
+			const nextCardState = buildFsrsUpdate(
+				card,
+				rating as FsrsReviewRating,
+				now,
+			);
 
 			try {
 				await db.transaction("rw", db.cards, async () => {
-					await db.cards.update(card.id, {
-						due: nextCardState.due,
-						state: nextCardState.state,
-						stability: nextCardState.stability,
-						difficulty: nextCardState.difficulty,
-						elapsed_days: nextCardState.elapsed_days,
-						scheduled_days: nextCardState.scheduled_days,
-						learning_steps: nextCardState.learning_steps,
-						reps: nextCardState.reps,
-						lapses: nextCardState.lapses,
-						last_review: nextCardState.last_review,
-					});
+					await db.cards.update(card.id, { ...nextCardState });
 				});
 
 				const award = await awardReview(rating, now);
