@@ -9,7 +9,7 @@ export interface LocalCard extends FSRSCard {
 	back: string;
 	category: string;
 	createdAt: Date;
-	// ts-fsrs butuh field ini, tapi tidak dipakai/di-storage di D1 — selalu 0.
+	// Disimpan di D1 juga (kolom learning_steps) — review menulisnya via buildFsrsUpdate.
 	learning_steps: number;
 }
 

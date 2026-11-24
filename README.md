@@ -5,9 +5,9 @@ Aplikasi flashcard _offline-first_ modern berbasis Spaced Repetition System (SRS
 ## 🛠 Tech Stack
 
 - **Frontend:** TanStack Start (React 19), TanStack Router (file-based, `validateSearch` untuk `?category=`), Tailwind CSS 4, Vite 8, WebGL radial effect layer (CSS gradient fallback)
-- **Backend:** Hono `^4.13`, Cloudflare Workers, `hono/cors` + Hono RPC (`hc<AppType>`), `drizzle-orm/batch`
-- **Database (Cloud):** Cloudflare D1 (SQLite) via Drizzle ORM `1.0.0-rc.4` — 14 kolom
-- **Database (Local/Offline):** IndexedDB via Dexie.js `^4.4.5` (v3, index `category`) + `dexie-react-hooks`
+- **Backend:** Hono `^4.13`, Cloudflare Workers, `hono/cors` + Hono RPC (`hc<AppType>`)
+- **Database (Cloud):** Cloudflare D1 (SQLite) via Drizzle ORM `1.0.0-rc.4` — 15 kolom
+- **Database (Local/Offline):** IndexedDB via Dexie.js `^4.4.5` (v7, index `category`, tanpa syncQueue — download-only) + `dexie-react-hooks`
 - **SRS Engine:** `ts-fsrs` `^5.4.1` (client-side, `maximum_interval: 36500`, `createEmptyCard`)
 - **Design:** Systems Architecture (Neuform) — dark `#050505`, surface `#4C4C4C`, primary `#C7F300` lime, secondary `#4330C2` purple, Inter 64px display + JetBrains Mono 12px label, rounded 8px
 - **Monorepo:** pnpm workspaces (`pnpm@10.30.1`)
@@ -17,30 +17,41 @@ Aplikasi flashcard _offline-first_ modern berbasis Spaced Repetition System (SRS
 ```
 apps/
   web/
-    src/routes/__root.tsx       # Shell dark, glow effect, nav mono uppercase, mount useSyncWorker
+    src/routes/__root.tsx       # Shell dark, glow effect, nav mono uppercase, mount useAutoSync
     src/routes/index.tsx        # Hero "Structure dictates function." (64px) → bento pills → grid → create form
     src/routes/review.tsx       # /review?category= → filtered due cards, lime progress bar, empty/completed dark
+    src/routes/kelola.tsx       # /kelola → grid kartu + KelolaCardFormModal / KelolaCardItem / KelolaPagination
+    src/routes/komunitas.tsx    # /komunitas → chat + Komunitas*Modal, hook useCommunityChat
+    src/routes/pengaturan.tsx   # /pengaturan → PengaturanCloudSection / PengaturanDeckSection / PengaturanLocalBackupSection / PengaturanPreferensi
     src/components/ReviewCard.tsx # Dark flip card, category badge mono, 4 rating (rose/amber/emerald/blue)
-    src/lib/db.ts               # Dexie "FlashcardDB" v3 (cards: id, due, category + syncQueue typed)
+    src/lib/db.ts               # Dexie "FlashcardDB" v7 (cards: id, due, category; gameStats; habitats; meta; communityMessages; practiceHistory) — tanpa syncQueue
+    src/lib/sync.ts             # Download-only: checkAndUpdateDeck / runSync (GET /api/deck/version + /api/deck/cards, batch 100)
+    src/lib/cloud/              # handle.ts / status.ts / upload.ts / download.ts / shared-deck.ts (backup R2 + import deck teman)
     src/lib/api.ts              # hc<AppType>(VITE_API_URL || localhost:8787)
-    src/hooks/useSyncWorker.ts  # Poll 10s + online → POST /api/sync → bulkDelete
+    src/hooks/useAutoSync.ts    # Sekali saat onboarding (IndexedDB kosong) → runSync; tanpa background polling
     src/styles.css              # @theme tokens, shimmer, hover-lift, masked-reveal, staggered
   api/
-    src/index.ts                # GET/POST /api/cards (category), POST /api/sync (9 FSRS + optional category, db.batch), GET /api/hello
+    src/index.ts                # Composition root: CORS + route() + GET/POST /mcp
+    src/routes/deck.ts          # GET /api/hello, /api/deck/version, /api/deck/cards, /api/user/check-handle, POST /api/user/claim-handle
+    src/routes/community.ts     # WS /ws/community, GET/POST/DELETE /api/community/messages, POST /api/community/heartbeat
+    src/routes/backup.ts        # POST/GET /api/backup/cloud, GET /api/backup/cloud/status (R2)
+    src/mcp/tools.ts            # 13 MCP tools (CRUD/kategori/search/FSRS review/import/export)
+    src/lib/deck-version.ts     # Hash FNV-1a deckVersion + cache
+    src/lib/env.ts              # Bindings + getD1
     wrangler.jsonc              # D1 binding DB → flashcard_db, migrations ../../packages/db/migrations
 packages/
   db/
-    index.ts                    # cards: id, front, back, category (default "general"), due, stability, difficulty, state, elapsed_days, scheduled_days, reps, lapses, last_review, createdAt (14 kolom)
+    index.ts                    # cards: id, front, back, category (default "general"), due, stability, difficulty, state, elapsed_days, scheduled_days, learning_steps, reps, lapses, last_review, createdAt (15 kolom)
     drizzle.config.ts           # dialect sqlite
     migrations/                 # 20260821030304_strong_skaar, 20260821035659_large_quentin_quire, 20260821044020_robust_morg (6 ADD COLUMN FSRS), 20260821060345_flawless_starbolt (category)
   shared/
-    index.ts                    # fsrsEngine, Rating, FSRSCard, createEmptyCard
+    index.ts                    # fsrsEngine, Rating, FSRSCard, createEmptyCard, normalizeCategory, buildFsrsUpdate, FSRS_RATINGS, normalizeUserHandle, isReservedHandle
   mcp/
     src/index.ts                # MCP stdio server — 13 tools CRUD/kategori/search/FSRS review/import/export
     claude_desktop_config.example.json  # Snippet konfigurasi Claude Desktop
 ```
 
-### Skema `cards` (D1 & Dexie sinkron, 14 kolom)
+### Skema `cards` (D1 & Dexie sinkron, 15 kolom)
 
 | Kolom | Tipe D1 | Kategori |
 |---|---|---|
@@ -51,11 +62,12 @@ packages/
 | `stability` / `difficulty` | `real` | FSRS |
 | `state` | `integer` | 0 New / 1 Learning / 2 Review / 3 Relearning |
 | `elapsed_days` / `scheduled_days` | `real` | FSRS |
+| `learning_steps` | `integer` | FSRS — langkah belajar saat ini |
 | `reps` / `lapses` | `integer` | Hitungan |
 | `last_review` | `integer` timestamp nullable | Terakhir |
 | `created_at` | `integer` timestamp | `strftime('%s','now')` |
 
-Dexie `LocalCard extends FSRSCard { id, front, back, category }`; `syncQueue` menyimpan `SyncAction { action: "REVIEW_CARD", payload: { id, nextState, category? } }` (typed, optional category untuk future edit).
+Dexie `LocalCard extends FSRSCard { id, front, back, category, createdAt, learning_steps }`; sync download-only — tidak ada `syncQueue`/`SyncAction` (dihapus di Dexie v5).
 
 ### Desain (Systems Architecture)
 
@@ -177,13 +189,8 @@ Create (Home inline form):
 
 Review di /review?category=matematika (optional):
   fsrsEngine.repeat(card, now) → preview interval dinamis
-  → db.transaction("rw", db.cards, db.syncQueue):
-       db.cards.update(id, { due, state, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, last_review })
-       db.syncQueue.add({ action:"REVIEW_CARD", payload:{ id, nextState, category? } })
-  → useSyncWorker (di __root.tsx, poll 10s + online):
-       toArray → POST /api/sync { actions } via hc<AppType>
-       → api: setData 9 FSRS + if payload.category → setData.category → db.batch(batchUpdates)
-       → bulkDelete
+  → buildFsrsUpdate(card, rating, now) → db.cards.update(id, nextState)
+       10 field FSRS (termasuk learning_steps) — hanya Dexie, tanpa antrean, tanpa API call
 
 Home bento:
   categories = pure dynamic (Set dari db.cards.category, "general" diprioritaskan di urutan pertama)
@@ -191,7 +198,7 @@ Home bento:
   card badge mono 12px purple #4330C2 + due pulse dot lime jika due <= now
   link card → /review?category=...
 
-Pull: Home Sync → GET /api/cards → bulkPut (termasuk category)
+Pull deck (manual, Pengaturan): checkAndUpdateDeck / runSync → GET /api/deck/version → jika berubah, GET /api/deck/cards per batch 100 → bulkPut (kategori via normalizeCategory)
 ```
 
 ### Rute Frontend
@@ -203,20 +210,29 @@ Pull: Home Sync → GET /api/cards → bulkPut (termasuk category)
 
 ### API
 
-| Method | Path | Body |
+| Method | Path | Keterangan |
 |---|---|---|
-| `GET` | `/api/cards` | → semua kartu (termasuk category) |
-| `POST` | `/api/cards` | `{ front, back, category?: string }` → `category: trim() || "general"` |
-| `POST` | `/api/sync` | `{ actions: { id, nextState, category? }[] }` → `eq` + `Partial<inferInsert>` + conditional `category` → `db.batch` |
 | `GET` | `/api/hello` | health |
+| `GET` | `/api/deck/version` | hash FNV-1a deck saat ini (`fnv1a-…`) |
+| `GET` | `/api/deck/cards` | semua kartu deck referensi (batch 100 di client) |
+| `GET` | `/api/user/check-handle` | cek ketersediaan handle `kata-<nama>` |
+| `POST` | `/api/user/claim-handle` | klaim handle unik |
+| `GET` / `POST` | `/api/community/messages` | baca / kirim pesan komunitas |
+| `DELETE` | `/api/community/messages/:id` | hapus pesan |
+| `POST` | `/api/community/heartbeat` | presence & online count |
+| `POST` / `GET` | `/api/backup/cloud` | backup / restore deck ke R2 |
+| `GET` | `/api/backup/cloud/status` | status backup terakhir |
+| `GET` / `POST` | `/mcp` | JSON-RPC MCP (13 tools) |
+
+Tidak ada `POST /api/cards` / `POST /api/sync` — sync download-only, semua tulis ke Dexie lokal.
 
 ## 🛡️ Aturan Penting
 
 - pnpm only, strict TS, `hc<AppType>` (no fetch manual)
-- Semua mutasi → Dexie v3 (`category` indexed), tidak langsung API
-- FSRS client via `createEmptyCard` + 9 field
-- `useSyncWorker` di `__root.tsx` global
-- `POST /api/sync` WAJIB `db.batch()` (bukan loop)
+- Semua mutasi → Dexie v7 (`category` indexed), tidak langsung API
+- FSRS client via `createEmptyCard` + `buildFsrsUpdate` (10 field, termasuk `learning_steps`)
+- `useAutoSync` di `__root.tsx` — sekali saat onboarding, tanpa background polling
+- Sync download-only: tidak ada `POST /api/sync`, `syncQueue`, atau `SyncAction` — jangan dihidupkan kembali
 - Schema → `packages/db/index.ts` → `db:generate` → `wrangler apply`
 - Kategori: **pure dynamic** — tidak ada daftar hardcode; kategori diturunkan dari `db.cards.category` yang ada, fallback `"general"` untuk kartu tanpa kategori, input bebas + `<datalist>` di `CreateCardForm`, filter via bento pills
 
@@ -259,7 +275,7 @@ Sesuaikan path absolut `dist/index.js` jika perlu.
 | `list_categories` | Daftar kategori beserta jumlah kartu dan jumlah due per kategori | `includeCounts?` (boolean, default true) |
 | `get_stats` | Statistik: total, due, new, jumlah kategori, retention, breakdown per kategori | `category?` |
 | `search_cards` | Cari kartu berdasarkan teks pada front/back (LIKE), opsional filter kategori | `query` (required), `category?`, `limit` (1-50, default 10) |
-| `review_card` | Simulasikan review FSRS: beri rating, hitung nextState via `fsrsEngine`, persist 9 field FSRS | `id` (required), `rating` (again/hard/good/easy) |
+| `review_card` | Simulasikan review FSRS: beri rating, hitung nextState via `buildFsrsUpdate`, persist 10 field FSRS | `id` (required), `rating` (again/hard/good/easy) |
 | `import_cards` | Import banyak kartu sekaligus (maks 100) dalam satu insert bulk | `cards[]` (array `{front, back, category?}`, min 1, max 100), `format?` (json, default json) |
 | `export_cards` | Ekspor kartu (semua atau per kategori) dalam format JSON atau CSV | `category?`, `format?` (json/csv, default json) |
 
