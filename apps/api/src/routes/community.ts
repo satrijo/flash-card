@@ -59,7 +59,6 @@ export const communityRoutes = new Hono<{ Bindings: Bindings }>()
     server.accept();
     connectedSockets.add(server);
 
-    // Kirim histori pesan dan info jumlah online ke client yang baru terhubung
     try {
       server.send(
         JSON.stringify({
@@ -254,7 +253,6 @@ export const communityRoutes = new Hono<{ Bindings: Bindings }>()
     const now = Date.now();
     const activeCutoff = now - 45_000;
 
-    // Simpan presence dan bersihkan record basi (> 60 detik)
     await d1.batch([
       d1.prepare(`
         INSERT OR REPLACE INTO community_presence (device_id, username, activity, last_seen)

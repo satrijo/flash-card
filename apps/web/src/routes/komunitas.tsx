@@ -58,7 +58,6 @@ function KomunitasPage() {
 
 	const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-	// Load flashcards for sharing
 	const allCards = useLiveQuery(() => db.cards.toArray(), []);
 
 	// Sinkronkan username saat berubah dari tempat lain (mis. /pengaturan)
@@ -74,13 +73,11 @@ function KomunitasPage() {
 			window.removeEventListener("kata-username-changed", onUsernameChanged);
 	}, []);
 
-	// Auto scroll saat pesan baru masuk
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom on new messages
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	// Kirim pesan
 	const handleSendMessage = async (e?: React.FormEvent) => {
 		e?.preventDefault();
 		const cleanText = inputText.trim();
@@ -106,7 +103,6 @@ function KomunitasPage() {
 		setSelectedShareCard(null);
 	};
 
-	// Simpan perubahan username (klaim ID unik kata-<nama>)
 	const [adminKeyInput, setAdminKeyInput] = useState("");
 	const [usernameError, setUsernameError] = useState<string | null>(null);
 	const [isSavingUsername, setIsSavingUsername] = useState(false);
@@ -131,7 +127,6 @@ function KomunitasPage() {
 		}
 	};
 
-	// Filter kartu untuk dibagikan
 	const filteredShareCards = allCards
 		?.filter((c) => {
 			if (!searchShareQuery.trim()) return true;

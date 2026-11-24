@@ -47,7 +47,6 @@ function KelolaPage() {
 	const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
 	const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
-	// Modal Impor dari Teman / Komunitas
 	const [isImportModalOpen, setIsImportModalOpen] = useState(
 		Boolean(searchParams.importUser),
 	);
@@ -86,7 +85,6 @@ function KelolaPage() {
 		return { availableCategories: result, categoryCounts: counts };
 	}, [cards]);
 
-	// Filtered & Sorted cards list
 	const filteredCards = useMemo(() => {
 		if (!cards) return [];
 		const q = searchQuery.trim().toLowerCase();
@@ -94,7 +92,6 @@ function KelolaPage() {
 
 		return cards
 			.filter((c) => {
-				// Category filter
 				if (selectedCategory !== "all") {
 					const cat = normalizeCategory(c.category);
 					if (cat !== selectedCategory) {
@@ -102,7 +99,6 @@ function KelolaPage() {
 					}
 				}
 
-				// State filter
 				if (selectedState !== "all") {
 					if (selectedState === "due") {
 						const due = new Date(c.due);
@@ -116,7 +112,6 @@ function KelolaPage() {
 					}
 				}
 
-				// Search query
 				if (q.length > 0) {
 					const cat = normalizeCategory(c.category);
 					return (
@@ -156,7 +151,6 @@ function KelolaPage() {
 		return filteredCards.slice(start, start + PAGE_SIZE);
 	}, [filteredCards, safePage]);
 
-	// Hapus kartu dari Dexie
 	const handleDelete = async (id: string) => {
 		await db.cards.delete(id);
 		setDeleteConfirmId(null);
@@ -164,7 +158,6 @@ function KelolaPage() {
 		scheduleCloudPush(4000);
 	};
 
-	// Reset memori kartu ke status baru (state: 0)
 	const handleResetSrs = async (card: LocalCard) => {
 		const now = new Date();
 		const empty = createEmptyCard(now);

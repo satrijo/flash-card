@@ -10,7 +10,6 @@ import {
 	sendCommunityHeartbeatRest,
 } from "../lib/community";
 
-// Global in-memory cache of presence data
 let globalOnlineCount = 1;
 let globalActiveLearners: ActiveLearner[] = [];
 const presenceListeners = new Set<() => void>();
@@ -46,7 +45,6 @@ export function useGlobalPresence() {
 	const pathname = routerState.location.pathname;
 	const search = (routerState.location.search ?? {}) as Record<string, unknown>;
 
-	// Tentukan aktivitas pengguna berdasarkan halaman saat ini
 	let activity = "Membuka Beranda";
 	if (pathname.startsWith("/latihan")) {
 		const tahap = typeof search.tahap === "string" ? search.tahap.trim() : "";

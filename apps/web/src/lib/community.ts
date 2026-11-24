@@ -63,7 +63,6 @@ const AVATAR_COLORS = [
 const DEVICE_ID_KEY = "kata_device_id";
 const USERNAME_KEY = "kata_username";
 
-// Ambil atau buat Device ID unik yang persisten
 export function getOrCreateDeviceId(): string {
 	if (typeof window === "undefined") return "server-device-000";
 	try {
@@ -81,7 +80,6 @@ export function getOrCreateDeviceId(): string {
 	}
 }
 
-// Generate nama unik bawaan berdasarkan hash Device ID
 function generateDefaultUsername(deviceId: string): string {
 	let hash = 0;
 	for (let i = 0; i < deviceId.length; i++) {
@@ -95,7 +93,6 @@ function generateDefaultUsername(deviceId: string): string {
 	return `${adj}${noun}-${suffix}`;
 }
 
-// Ambil username saat ini (bisa custom atau auto-generated)
 export function getCommunityUsername(): string {
 	if (typeof window === "undefined") return "kata-hero";
 	try {
@@ -119,7 +116,6 @@ export function getCommunityUsername(): string {
 	}
 }
 
-// Simpan username baru pilihan pengguna
 export function setCommunityUsername(name: string): string {
 	const cleaned = name.trim().slice(0, 30);
 	if (!cleaned) return getCommunityUsername();
@@ -136,7 +132,6 @@ export function setCommunityUsername(name: string): string {
 	return cleaned;
 }
 
-// Dapatkan warna gradien avatar konsisten berdasarkan username
 export function getAvatarGradient(name: string): string {
 	let hash = 0;
 	for (let i = 0; i < name.length; i++) {
@@ -147,7 +142,6 @@ export function getAvatarGradient(name: string): string {
 	return AVATAR_COLORS[idx];
 }
 
-// Dapatkan inisial 1–2 karakter
 export function getInitials(name: string): string {
 	const parts = name.split(/[-_ #]/).filter(Boolean);
 	if (parts.length >= 2) {
@@ -156,7 +150,6 @@ export function getInitials(name: string): string {
 	return name.slice(0, 2).toUpperCase();
 }
 
-// Base URL backend API
 export function getApiBaseUrl(): string {
 	if (typeof window === "undefined") return "";
 	const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
@@ -170,7 +163,6 @@ export function getApiBaseUrl(): string {
 	return window.location.origin;
 }
 
-// URL endpoint WebSocket untuk Community Chat
 export function getWsUrl(): string {
 	if (typeof window === "undefined") return "";
 	const baseUrl = getApiBaseUrl();
@@ -181,7 +173,6 @@ export function getWsUrl(): string {
 // Batas umur pesan lokal: 1 hari / 24 jam (agar IndexedDB selalu ringan dan bersih)
 const MAX_MESSAGE_AGE_MS = 1 * 24 * 60 * 60 * 1000;
 
-// Bersihkan pesan komunitas yang lebih lama dari 1 hari (24 jam)
 export async function cleanupOldCommunityMessages(): Promise<number> {
 	try {
 		const cutoff = Date.now() - MAX_MESSAGE_AGE_MS;
@@ -196,7 +187,6 @@ export async function cleanupOldCommunityMessages(): Promise<number> {
 	}
 }
 
-// Simpan pesan baru ke IndexedDB lokal (offline-first)
 export async function saveLocalCommunityMessage(
 	msg: CommunityMessage,
 ): Promise<void> {
@@ -207,12 +197,10 @@ export async function saveLocalCommunityMessage(
 	}
 }
 
-// Muat histori pesan lokal & bersihkan pesan lama >1 hari
 export async function loadLocalCommunityMessages(
 	limit = 50,
 ): Promise<CommunityMessage[]> {
 	try {
-		// Jalankan pembersihan pesan >1 hari di latar belakang
 		void cleanupOldCommunityMessages();
 
 		return await db.communityMessages
@@ -278,7 +266,6 @@ export async function sendCommunityMessageRest(
 	}
 }
 
-// REST heartbeat untuk update status presence & online count & aktivitas
 export async function sendCommunityHeartbeatRest(
 	deviceId: string,
 	username: string,

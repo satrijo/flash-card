@@ -22,6 +22,7 @@ import { useCloudSync } from "../hooks/useCloudSync";
 import { useGlobalPresence } from "../hooks/useGlobalPresence";
 import { usePwaInstall } from "../hooks/usePwaInstall";
 import { useTheme } from "../hooks/useTheme";
+import { GA_MEASUREMENT_ID } from "../lib/analytics";
 import { unlockTts } from "../lib/tts";
 
 import appCss from "../styles.css?url";
@@ -91,12 +92,11 @@ export const Route = createRootRoute({
 		],
 		scripts: [
 			{
-				src: "https://www.googletagmanager.com/gtag/js?id=G-2LQ8B05LC0",
+				src: `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`,
 				async: true,
 			},
 			{
-				children:
-					"window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', 'G-2LQ8B05LC0');",
+				children: `window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', '${GA_MEASUREMENT_ID}');`,
 			},
 			{
 				children: FOUC_SCRIPT,
@@ -133,7 +133,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 	// Lacak perpindahan halaman SPA ke Google Analytics
 	useEffect(() => {
 		if (typeof window !== "undefined" && typeof window.gtag === "function") {
-			window.gtag("config", "G-2LQ8B05LC0", {
+			window.gtag("config", GA_MEASUREMENT_ID, {
 				page_path: currentPath,
 				page_title: document.title,
 			});

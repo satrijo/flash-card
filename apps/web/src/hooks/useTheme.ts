@@ -37,19 +37,16 @@ export function useTheme(): {
 	}, []);
 
 	const toggleTheme = useCallback(() => {
-		// Toggle antara light dan dark
 		const next: Theme = resolvedTheme === "dark" ? "light" : "dark";
 		setTheme(next);
 	}, [resolvedTheme, setTheme]);
 
-	// Sinkronkan tema saat mount dan listen perubahan sistem & localStorage
 	useEffect(() => {
 		const initial = getInitialTheme();
 		setThemeState(initial);
 		applyTheme(initial);
 		setResolvedTheme(getResolvedTheme(initial));
 
-		// Listen ke perubahan preferensi tema OS (prefers-color-scheme)
 		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 		const handleMediaChange = () => {
 			const currentStored = getInitialTheme();
@@ -59,7 +56,6 @@ export function useTheme(): {
 			}
 		};
 
-		// Listen ke perubahan localStorage dari tab lain
 		const handleStorageChange = (e: StorageEvent) => {
 			if (e.key === "kata-theme") {
 				const nextTheme = (e.newValue as Theme) || "system";
@@ -69,7 +65,6 @@ export function useTheme(): {
 			}
 		};
 
-		// Listen ke custom event dari komponen lain di tab yang sama
 		const handleCustomChange = (e: Event) => {
 			const customEvent = e as CustomEvent<Theme>;
 			if (customEvent.detail) {

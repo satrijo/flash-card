@@ -139,7 +139,6 @@ const mcpRoutes = app
       }
     }
 
-    // Unknown method
     return c.json({
       jsonrpc: "2.0",
       id,

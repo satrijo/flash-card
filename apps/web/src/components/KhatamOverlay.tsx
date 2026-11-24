@@ -72,7 +72,6 @@ export function KhatamOverlay({
 		};
 	}, [category, seedNonce]);
 
-	// Setelah semua soal terjawab → hitung skor → pass/fail.
 	useEffect(() => {
 		if (phase !== "result" || !quiz) return;
 		const score = answers.filter((a, i) => a === quiz[i]?.correct).length;

@@ -32,7 +32,6 @@ export function SharedCardMessageBubble({
 	const parsed = parseBackContent(cardRef.back);
 	const category = normalizeCategory(cardRef.category);
 
-	// Periksa apakah kartu ini sudah ada di database lokal pengguna
 	const isAlreadyInDeck = useLiveQuery(async () => {
 		const normFront = cardRef.front.trim().toLowerCase();
 		const all = await db.cards.toArray();

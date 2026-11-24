@@ -63,7 +63,6 @@ export function useCommunityChat({
 		let pollingTimer: ReturnType<typeof setInterval> | null = null;
 		let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-		// 1. Kirim heartbeat per 20 detik saat di halaman komunitas
 		const beat = () => {
 			if (document.visibilityState !== "visible") return;
 			void sendCommunityHeartbeatRest(deviceId, username, "Di Komunitas").then(
@@ -80,7 +79,7 @@ export function useCommunityChat({
 		beat();
 		heartbeatTimer = setInterval(beat, 20000);
 
-		// 2. Polling REST hemat kuota (hanya jika WebSocket putus & tab aktif)
+		// Polling REST hanya saat WebSocket putus (hemat kuota D1)
 		let lastMsgTimestamp = 0;
 		const pollMessages = () => {
 			if (document.visibilityState !== "visible") return;
@@ -109,7 +108,7 @@ export function useCommunityChat({
 		pollMessages();
 		pollingTimer = setInterval(pollMessages, 5000);
 
-		// 3. Koneksi WebSocket untuk push instant tanpa query database
+		// WebSocket: push instan tanpa query D1
 		function connectWebSocket() {
 			const wsUrl = getWsUrl();
 			if (!wsUrl) return;
@@ -185,14 +184,11 @@ export function useCommunityChat({
 
 	// Kirim pesan: optimistic + simpan lokal + REST + WebSocket
 	const sendMessage = (payload: CommunityMessage) => {
-		// 1. Optimistic update
 		setMessages((prev) => mergeMessages(prev, payload));
 		void saveLocalCommunityMessage(payload);
 
-		// 2. Kirim ke D1 database via REST (100% tersimpan dan tersinkron ke semua device)
 		void sendCommunityMessageRest(payload);
 
-		// 3. Kirim via WebSocket juga jika terbuka
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 			try {
 				wsRef.current.send(

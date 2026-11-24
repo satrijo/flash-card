@@ -79,7 +79,6 @@ export function SharedDeckImportModal({
 			backupAt: res.backupAt,
 		});
 
-		// Otomatis pilih semua kategori yang memiliki kata baru (> 0)
 		const withNewWords = res.categories
 			.filter((c) => c.newCards > 0)
 			.map((c) => c.name);
@@ -90,7 +89,6 @@ export function SharedDeckImportModal({
 		);
 	}, []);
 
-	// Sinkronkan initialHandle saat modal dibuka
 	useEffect(() => {
 		if (isOpen) {
 			setTargetHandle(initialHandle);
@@ -105,7 +103,6 @@ export function SharedDeckImportModal({
 		}
 	}, [isOpen, initialHandle, handleInspect]);
 
-	// Toggle kategori tertentu
 	const toggleCategory = (catName: string) => {
 		setSelectedCategories((prev) =>
 			prev.includes(catName)
@@ -114,7 +111,6 @@ export function SharedDeckImportModal({
 		);
 	};
 
-	// Pilih semua atau kosongkan
 	const toggleSelectAllCategories = () => {
 		if (!deckInfo) return;
 		if (selectedCategories.length === deckInfo.categories.length) {
@@ -124,7 +120,6 @@ export function SharedDeckImportModal({
 		}
 	};
 
-	// Hitung total kata baru dari kategori-kategori yang sedang dicentang
 	const selectedSummary = useMemo(() => {
 		if (!deckInfo) return { totalNew: 0, totalCards: 0 };
 		const set = new Set(selectedCategories);

@@ -3,7 +3,6 @@
 
 import { db, type PracticeSessionRecord } from "./db";
 
-// Simpan catatan sesi latihan yang baru selesai
 export async function savePracticeSession(
 	session: Omit<PracticeSessionRecord, "id">,
 ): Promise<number | undefined> {
@@ -16,7 +15,6 @@ export async function savePracticeSession(
 	}
 }
 
-// Muat daftar sesi latihan terbaru
 export async function loadPracticeSessions(
 	limit = 30,
 ): Promise<PracticeSessionRecord[]> {
@@ -32,7 +30,6 @@ export async function loadPracticeSessions(
 	}
 }
 
-// Hapus seluruh riwayat latihan
 export async function clearPracticeHistory(): Promise<void> {
 	try {
 		await db.practiceHistory.clear();

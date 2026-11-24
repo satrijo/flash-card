@@ -61,14 +61,13 @@ export function PengaturanCloudSection({
 	const [restoreCloudSuccess, setRestoreCloudSuccess] = useState(false);
 
 	useEffect(() => {
-		// Muat handle & cloud backup timestamp
 		const currentH = getCurrentUserHandle();
 		setUserHandle(currentH);
 		setHandleDraft(currentH);
 		const cachedTime = getLastCloudBackupTime();
 		if (cachedTime) setLastCloudBackup(cachedTime);
 
-		// Periksa status riil langsung ke Cloudflare R2 / D1
+		// Waktu lokal bisa basi — cek status riil ke R2/D1
 		void getCloudBackupStatus(currentH).then((st) => {
 			if (st.exists && st.backupAt) {
 				setLastCloudBackup(st.backupAt);
@@ -130,7 +129,6 @@ export function PengaturanCloudSection({
 			setHandleSuccessMsg(`ID berhasil diubah menjadi ${res.handle}`);
 			setTimeout(() => setHandleSuccessMsg(null), 3000);
 
-			// Refresh status cadangan untuk handle yang baru diklaim
 			void getCloudBackupStatus(res.handle).then((st) => {
 				if (st.exists && st.backupAt) {
 					setLastCloudBackup(st.backupAt);

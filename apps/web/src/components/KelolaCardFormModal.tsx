@@ -9,7 +9,6 @@ import { BAND_ORDER, parseBackContent } from "../lib/bands";
 import { db, type LocalCard } from "../lib/db";
 import { Icon } from "./Icon";
 
-// Modal Form Tambah / Edit Kartu
 export function KelolaCardFormModal({
 	mode,
 	initialCard,
@@ -62,7 +61,6 @@ export function KelolaCardFormModal({
 
 	const isCustomCat = category === "custom";
 
-	// Insert quick POS tag marker
 	const insertPos = (tag: string) => {
 		setBackGloss((prev) => (prev ? `${prev}; [${tag}] ` : `[${tag}] `));
 	};
@@ -80,7 +78,6 @@ export function KelolaCardFormModal({
 			return;
 		}
 
-		// Compose back string: gloss + optional Ex: exampleEn (exampleId)
 		let composedBack = cleanGloss;
 		if (exampleEn.trim()) {
 			if (exampleId.trim()) {

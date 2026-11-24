@@ -10,7 +10,6 @@ import { describe, expect, it } from "vitest";
 import {
 	deckVersionFromRows,
 	getCachedDeckVersion,
-	invalidateDeckVersionCache,
 	setCachedDeckVersion,
 } from "./lib/deck-version";
 
@@ -53,8 +52,7 @@ describe("deckVersionFromRows", () => {
 });
 
 describe("cache versi deck (lib/deck-version.ts)", () => {
-	it("awal null; set -> get mengembalikan nilai; invalidate -> null lagi", () => {
-		invalidateDeckVersionCache();
+	it("awal null; set -> get mengembalikan nilai yang sama", () => {
 		expect(getCachedDeckVersion()).toBeNull();
 		setCachedDeckVersion({
 			version: "fnv1a-2f5f5895",
@@ -66,7 +64,5 @@ describe("cache versi deck (lib/deck-version.ts)", () => {
 			count: 1,
 			expiresAt: expect.any(Number),
 		});
-		invalidateDeckVersionCache();
-		expect(getCachedDeckVersion()).toBeNull();
 	});
 });

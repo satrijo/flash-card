@@ -66,7 +66,6 @@ export async function getUnlockedBands(): Promise<Set<string>> {
 		: [];
 	const unlocked = new Set<string>(["inggris-easy", ...quizPassed]);
 
-	// Auto-unlock real-time: periksa apakah syarat kata matang atau level terpenuhi
 	const cards = await db.cards.toArray();
 	const stats = await db.gameStats.get("user");
 	const level = stats ? levelFromXp(stats.xp).level : 1;
@@ -298,7 +297,6 @@ export function parseBackContent(back: string): ParsedBack {
 			});
 		}
 	} else {
-		// Tidak ada tag kelas kata terdeteksi
 		items.push({
 			text: glossPart.replace(/[.;\s]+$/g, "").trim() || back,
 		});

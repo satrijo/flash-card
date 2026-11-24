@@ -24,7 +24,7 @@ export function deckVersionFromRows(
 
 // Cache versi deck di memori Worker (5 menit) — supaya cek versi tidak
 // membaca ±2.500 baris di setiap sync check. State tinggal di modul ini;
-// routes/deck.ts hanya membaca/menulis lewat tiga fungsi di bawah.
+// routes/deck.ts hanya membaca/menulis lewat dua fungsi di bawah.
 let cached: { version: string; count: number; expiresAt: number } | null =
   null;
 
@@ -40,6 +40,3 @@ export function setCachedDeckVersion(value: {
   cached = value;
 }
 
-export function invalidateDeckVersionCache() {
-  cached = null;
-}

@@ -23,7 +23,6 @@ export interface LevelInfo {
 	rankName: string;
 }
 
-// Rank pemain per level — flavor modern.
 const RANK_NAMES = ["Pemula", "Terampil", "Mahir", "Pakar", "Legenda"] as const;
 
 export function rankForLevel(level: number): string {
@@ -190,7 +189,6 @@ export async function awardReview(
 		const xpGained = xpForRating(rating);
 		stats.xp += xpGained;
 
-		// Roll hari: reset hitungan harian dan lanjutkan/reset streak
 		const k = dayKey(now);
 		if (stats.todayKey !== k) {
 			stats.todayKey = k;

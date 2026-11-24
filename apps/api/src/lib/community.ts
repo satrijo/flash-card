@@ -17,12 +17,6 @@ export interface CommunityMessageDto {
   timestamp: number;
 }
 
-export interface ActiveLearnerDto {
-  username: string;
-  activity: string;
-  lastSeen: number;
-}
-
 let communityTablesInit = false;
 export async function initCommunityD1(d1: D1Database): Promise<void> {
   if (communityTablesInit) return;

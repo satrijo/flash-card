@@ -133,7 +133,6 @@ export async function computeStats(now: Date = new Date()): Promise<AppStats> {
 	}
 
 	const studiedCount = total - fresh;
-	// Tingkat retensi dihitung dari kartu yang sudah dipelajari
 	const retentionRate =
 		studiedCount > 0 ? Math.round((mature / studiedCount) * 100) : 100;
 
@@ -193,7 +192,6 @@ export async function computeStats(now: Date = new Date()): Promise<AppStats> {
 			};
 		});
 
-	// Riwayat 7 hari
 	const raw = histRow?.value;
 	const hist: ReviewHistory =
 		raw && typeof raw === "object" && !Array.isArray(raw)
