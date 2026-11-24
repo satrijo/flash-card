@@ -220,6 +220,7 @@ Pull deck (manual, Pengaturan): checkAndUpdateDeck / runSync → GET /api/deck/v
 | `GET` / `POST` | `/api/community/messages` | baca / kirim pesan komunitas |
 | `DELETE` | `/api/community/messages/:id` | hapus pesan |
 | `POST` | `/api/community/heartbeat` | presence & online count |
+| `GET` | `/ws/community` | WebSocket chat komunitas (upgrade dari HTTP) |
 | `POST` / `GET` | `/api/backup/cloud` | backup / restore deck ke R2 |
 | `GET` | `/api/backup/cloud/status` | status backup terakhir |
 | `GET` / `POST` | `/mcp` | JSON-RPC MCP (13 tools) |

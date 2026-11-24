@@ -1,7 +1,7 @@
 // apps/web/src/components/KelolaCardFormModal.tsx
 // Modal form tambah / edit satu kartu kosakata (front, arti, kategori,
 // contoh kalimat). Dipakai rute /kelola untuk mode create dan edit.
-import { createEmptyCard } from "@flashcard/shared";
+import { createEmptyCard, normalizeCategory } from "@flashcard/shared";
 import { useMemo, useState } from "react";
 import { scheduleCloudPush } from "../hooks/useCloudSync";
 import { trackEvent } from "../lib/analytics";
@@ -87,9 +87,9 @@ export function KelolaCardFormModal({
 			}
 		}
 
-		const finalCategory =
-			(isCustomCat ? customCategory.trim().toLowerCase() : category) ||
-			"general";
+		const finalCategory = normalizeCategory(
+			isCustomCat ? customCategory : category,
+		);
 
 		const now = new Date();
 

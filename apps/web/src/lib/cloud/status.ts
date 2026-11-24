@@ -9,8 +9,8 @@ const STORAGE_KEY_LAST_BACKUP = "kata_last_cloud_backup_time";
 
 export function getLastCloudBackupTime(): number | null {
 	if (typeof window === "undefined") return null;
-	const val = localStorage.getItem(STORAGE_KEY_LAST_BACKUP);
-	return val ? Number(val) : null;
+	// Samakan semantik inline lama di useCloudSync: "0"/non-numerik -> null.
+	return Number(localStorage.getItem(STORAGE_KEY_LAST_BACKUP) || "0") || null;
 }
 
 export function setLastCloudBackupTime(time: number): void {

@@ -9,6 +9,19 @@
 import { describe, expect, it } from "vitest";
 import app from "./index";
 
+// Bentuk respons JSON-RPC dari POST /mcp (sukses atau error).
+interface McpJsonRpcResponse {
+	jsonrpc: string;
+	id: number;
+	result?: {
+		protocolVersion?: string;
+		serverInfo?: { name: string; version: string };
+		tools?: { name: string }[];
+		content?: { type: string; text: string }[];
+	};
+	error?: { code: number; message: string };
+}
+
 const TOOL_NAMES = [
 	"ping",
 	"list_cards",
@@ -38,7 +51,7 @@ async function postMcp(body: unknown) {
 		},
 		{},
 	);
-	return { status: res.status, json: (await res.json()) as Record<string, any> };
+	return { status: res.status, json: (await res.json()) as McpJsonRpcResponse };
 }
 
 describe("GET /api/hello", () => {
@@ -73,8 +86,8 @@ describe("POST /mcp (JSON-RPC)", () => {
 			params: {},
 		});
 		expect(status).toBe(200);
-		expect(json.result.protocolVersion).toBe("2024-11-05");
-		expect(json.result.serverInfo).toEqual({
+		expect(json.result?.protocolVersion).toBe("2024-11-05");
+		expect(json.result?.serverInfo).toEqual({
 			name: "flashcard-mcp",
 			version: "1.0.0",
 		});
@@ -86,7 +99,7 @@ describe("POST /mcp (JSON-RPC)", () => {
 			id: 2,
 			method: "tools/list",
 		});
-		expect(json.result.tools.map((t: { name: string }) => t.name)).toEqual(
+		expect(json.result?.tools?.map((t: { name: string }) => t.name)).toEqual(
 			TOOL_NAMES,
 		);
 	});
@@ -98,7 +111,7 @@ describe("POST /mcp (JSON-RPC)", () => {
 			method: "tools/call",
 			params: { name: "ping", arguments: {} },
 		});
-		expect(json.result.content).toEqual([
+		expect(json.result?.content).toEqual([
 			{ type: "text", text: '"pong"' },
 		]);
 	});
@@ -110,7 +123,7 @@ describe("POST /mcp (JSON-RPC)", () => {
 			method: "tools/call",
 			params: { name: "tidak_ada", arguments: {} },
 		});
-		expect(json.error.code).toBe(-32601);
+		expect(json.error?.code).toBe(-32601);
 	});
 
 	it("method tak dikenal -> -32601", async () => {
@@ -119,7 +132,7 @@ describe("POST /mcp (JSON-RPC)", () => {
 			id: 5,
 			method: "resources/list",
 		});
-		expect(json.error.code).toBe(-32601);
+		expect(json.error?.code).toBe(-32601);
 	});
 
 	it("body bukan JSON -> 400, -32700", async () => {
@@ -133,7 +146,7 @@ describe("POST /mcp (JSON-RPC)", () => {
 			{},
 		);
 		expect(res.status).toBe(400);
-		const json = (await res.json()) as Record<string, any>;
-		expect(json.error.code).toBe(-32700);
+		const json = (await res.json()) as McpJsonRpcResponse;
+		expect(json.error?.code).toBe(-32700);
 	});
 });
